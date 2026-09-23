@@ -1,0 +1,214 @@
+:root {
+    --ink: #173938;
+    --text: #445b59;
+    --muted: #82918f;
+    --mint: #7ed7b9;
+    --mint-dark: #287b70;
+    --coral: #eb765f;
+    --amber: #e6a55e;
+    --canvas: #f8f7f3;
+    --line: #e6e5de;
+    --card: #fff;
+    --el-color-primary: #287b70;
+    --el-color-primary-light-3: #58a097;
+    --el-color-primary-light-5: #8abdb7;
+    --el-color-primary-light-7: #bad8d4;
+    --el-color-primary-light-9: #eaf3f2;
+    --el-color-primary-dark-2: #1f625a;
+    --el-border-radius-base: 9px;
+}
+
+/* 全局盒模型 */
+html {
+    box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: inherit;
+}
+
+/* 页面基础设置 */
+html,
+body,
+#app {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+html,
+body {
+    height: 100%;
+}
+
+body {
+    min-width: 320px;
+    font-family:
+        Inter,
+        "Microsoft YaHei",
+        "PingFang SC",
+        Arial,
+        sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+    background-color: var(--canvas);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* 清除标题和段落的默认边距 */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+    margin: 0;
+    padding: 0;
+}
+
+/* 清除列表默认样式 */
+ul,
+ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* 清除链接默认样式 */
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: none;
+}
+
+/* 图片基础样式 */
+img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+/* 表单元素继承页面字体 */
+button,
+input,
+textarea,
+select {
+    margin: 0;
+    font: inherit;
+    color: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+/* 文本框禁止横向缩放 */
+textarea {
+    resize: vertical;
+}
+
+/* 表格边框合并 */
+table {
+    border-spacing: 0;
+    border-collapse: collapse;
+}
+
+/* HTML5 元素兼容 */
+header,
+footer,
+main,
+nav,
+section,
+article,
+aside {
+    display: block;
+}
+
+/* 隐藏元素 */
+[hidden] {
+    display: none !important;
+}
+
+.section-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 17px;
+}
+
+.section-heading h2 {
+    color: var(--ink);
+    font-family: Georgia, "Noto Serif SC", serif;
+    font-size: 19px;
+    font-weight: 600;
+}
+
+.section-heading p {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.text-action {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0;
+    color: var(--mint-dark);
+    font-size: 11px;
+    font-weight: 700;
+    background: none;
+    border: 0;
+}
+
+.surface {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 15px;
+}
+
+.status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #54706e;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.status::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #72c5a8;
+    box-shadow: 0 0 0 3px rgba(114, 197, 168, .12);
+}
+
+.status.pending::before { background: #e5a252; box-shadow: 0 0 0 3px rgba(229, 162, 82, .12); }
+.status.cancelled::before { background: #a6afad; box-shadow: 0 0 0 3px rgba(166, 175, 173, .12); }
+.status.completed::before { background: #789bca; box-shadow: 0 0 0 3px rgba(120, 155, 202, .12); }
+
+.el-button { font-weight: 600; }
+.el-dialog { border-radius: 16px !important; overflow: hidden; }
+.el-dialog__title { color: var(--ink); font-family: Georgia, "Noto Serif SC", serif; }
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-date-editor { box-shadow: 0 0 0 1px #dcdfd7 inset !important; }
+
+@media (max-width: 600px) {
+    .section-heading { align-items: start; }
+    .section-heading h2 { font-size: 17px; }
+}
