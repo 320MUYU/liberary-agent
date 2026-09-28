@@ -2,13 +2,16 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import BookingDialog from '@/components/BookingDialog.vue'
+import { useAuthStore } from '@/store/authStore'
 import { bookings, labs, statusMap } from '@/store/labStore'
 
 const router = useRouter()
+const { userInfo } = useAuthStore()
 const bookingOpen = ref(false)
 const selectedLab = ref(labs[0])
 const upcoming = computed(() => bookings.filter((item) => ['approved', 'pending'].includes(item.status)).slice(0, 3))
 const approvedCount = computed(() => bookings.filter((item) => item.status === 'approved').length)
+const userName = computed(() => userInfo.value?.name || userInfo.value?.username || '同学')
 
 function openBooking(lab = labs[0]) { selectedLab.value = lab; bookingOpen.value = true }
 function displayDate(date) { const [, month, day] = date.split('-'); return `${Number(month)}月${Number(day)}日` }
@@ -19,7 +22,7 @@ function displayDate(date) { const [, month, day] = date.split('-'); return `${N
     <section class="welcome-card">
       <div class="welcome-copy">
         <span class="eyebrow"><i></i> 2026 秋季学期</span>
-        <h2>上午好，林晓宇</h2>
+        <h2>上午好，{{ userName }}</h2>
         <p>今天是 9 月 22 日，祝你实验顺利。下一场实验将在下午 14:00 开始。</p>
         <div class="welcome-actions">
           <el-button type="primary" size="large" @click="openBooking()"><el-icon><Plus /></el-icon>预约实验室</el-button>

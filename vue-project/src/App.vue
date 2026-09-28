@@ -1,11 +1,15 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { getUserInfoApi } from '@/authApi'
 import { notifications } from '@/store/labStore'
+import { useAuthStore } from '@/store/authStore'
 
 const route = useRoute()
 const router = useRouter()
 const mobileMenuOpen = ref(false)
+const { token, userInfo, updateUser, logout } = useAuthStore()
 
 const navigation = [
   { label: '工作台', path: '/', icon: 'Odometer' },
@@ -15,15 +19,39 @@ const navigation = [
 ]
 
 const currentTitle = computed(() => route.meta.title || '工作台')
+const userName = computed(() => userInfo.value?.name || userInfo.value?.username || '用户')
+const userAvatar = computed(() => userName.value.slice(0, 1))
+const userRole = computed(() => ({ student: '学生', admin: '管理员' })[userInfo.value?.role] || '平台用户')
+const userCaption = computed(() => `${userInfo.value?.username || '账号'} · ${userRole.value}`)
 
 function navigate(path) {
   router.push(path)
   mobileMenuOpen.value = false
 }
+
+function handleProfileCommand(command) {
+  if (command !== 'logout') return
+
+  logout()
+  router.replace('/login')
+  ElMessage.success('已退出登录')
+}
+
+onMounted(async () => {
+  if (!token.value) return
+
+  try {
+    updateUser(await getUserInfoApi())
+  } catch {
+    // 请求层会统一提示错误，并在登录失效时跳转登录页。
+  }
+})
 </script>
 
 <template>
-  <div class="app-shell">
+  <router-view v-if="route.meta.layout === 'blank'" />
+
+  <div v-else class="app-shell">
     <div v-if="mobileMenuOpen" class="mobile-mask" @click="mobileMenuOpen = false"></div>
     <aside class="sidebar" :class="{ 'is-open': mobileMenuOpen }">
       <button class="brand" aria-label="返回工作台" @click="navigate('/')">
@@ -84,11 +112,18 @@ function navigate(path) {
             </div>
           </el-popover>
           <span class="top-divider"></span>
-          <div class="profile">
-            <span class="avatar">林</span>
-            <div><strong>林晓宇</strong><small>计算机科学 · 学生</small></div>
-            <el-icon><ArrowDown /></el-icon>
-          </div>
+          <el-dropdown trigger="click" @command="handleProfileCommand">
+            <button class="profile" type="button">
+              <span class="avatar">{{ userAvatar }}</span>
+              <div><strong>{{ userName }}</strong><small>{{ userCaption }}</small></div>
+              <el-icon><ArrowDown /></el-icon>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </header>
 
@@ -121,7 +156,7 @@ function navigate(path) {
 .page-shell { width: calc(100% - 256px); min-height: 100vh; margin-left: 256px; }
 .topbar { height: 86px; display: flex; align-items: center; justify-content: space-between; padding: 0 38px; position: sticky; top: 0; z-index: 20; background: rgba(248, 247, 243, .91); border-bottom: 1px solid #e8e6de; backdrop-filter: blur(15px); }
 .topbar-left { display: flex; align-items: center; gap: 14px; }.crumb { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; color: #91a09e; font-size: 10px; }.crumb span { color: #517271; }.crumb .el-icon { font-size: 9px; }.topbar h1 { color: var(--ink); font-family: Georgia, 'Noto Serif SC', serif; font-size: 23px; font-weight: 600; }
-.topbar-actions { display: flex; align-items: center; gap: 17px; }.icon-button { width: 38px; height: 38px; display: grid; place-items: center; position: relative; color: #496361; font-size: 18px; background: #fff; border: 1px solid #e1e4dd; border-radius: 11px; }.has-dot::after { content: ''; position: absolute; top: 7px; right: 8px; width: 6px; height: 6px; background: var(--coral); border: 2px solid white; border-radius: 50%; }.top-divider { width: 1px; height: 30px; background: #dedfd9; }.profile { display: flex; align-items: center; gap: 10px; }.avatar { width: 38px; height: 38px; display: grid; place-items: center; color: white; font-size: 13px; font-weight: 700; background: #2d6461; border-radius: 11px; }.profile strong, .profile small { display: block; }.profile strong { color: #203c3b; font-size: 12px; }.profile small { margin-top: 2px; color: #8b9997; font-size: 9px; }.profile > .el-icon { margin-left: 5px; color: #8b9997; font-size: 12px; }
+.topbar-actions { display: flex; align-items: center; gap: 17px; }.icon-button { width: 38px; height: 38px; display: grid; place-items: center; position: relative; color: #496361; font-size: 18px; background: #fff; border: 1px solid #e1e4dd; border-radius: 11px; }.has-dot::after { content: ''; position: absolute; top: 7px; right: 8px; width: 6px; height: 6px; background: var(--coral); border: 2px solid white; border-radius: 50%; }.top-divider { width: 1px; height: 30px; background: #dedfd9; }.profile { display: flex; align-items: center; gap: 10px; padding: 0; text-align: left; background: transparent; border: 0; }.avatar { width: 38px; height: 38px; display: grid; place-items: center; color: white; font-size: 13px; font-weight: 700; background: #2d6461; border-radius: 11px; }.profile strong, .profile small { display: block; }.profile strong { color: #203c3b; font-size: 12px; }.profile small { margin-top: 2px; color: #8b9997; font-size: 9px; }.profile > .el-icon { margin-left: 5px; color: #8b9997; font-size: 12px; }
 .menu-button { display: none; width: 38px; height: 38px; background: white; border: 1px solid #e1e4dd; border-radius: 10px; }
 .main-content { min-height: calc(100vh - 86px); padding: 30px 38px 42px; }
 .mobile-mask { display: none; }
