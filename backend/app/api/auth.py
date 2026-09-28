@@ -5,7 +5,7 @@ from app.database import get_db
 from app.models.users import User
 from app.schemas.user import UserResponse
 from app.utils.bcrypt import verify_password
-from app.utils.jwt import decode_access_token, create_access_token
+from app.utils.jwt import create_access_token
 from app.common.response import Response
 from app.common.exceptions import BusinessException
 
@@ -19,11 +19,11 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
     # 判断账号和密码是否正确
     if not user or not verify_password(data.password, user.password):
-        raise BusinessException(message="账号或密码错误")
+        raise BusinessException(code=401, message="账号或密码错误")
 
     # 验证账号的状态
     if user.status != 1:
-        raise BusinessException(message="账号被禁用")
+        raise BusinessException(code=403, message="账号被禁用")
 
     # 创建token
     token = create_access_token(user.id)
