@@ -10,6 +10,12 @@ const router = createRouter({
       component: () => import('@/views/LoginView.vue'),
       meta: { title: '登录', public: true, layout: 'blank' },
     },
+    {
+      path: '/register',
+      name: 'register',
+      component: () => import('@/views/RegisterView.vue'),
+      meta: { title: '注册', public: true, layout: 'blank' },
+    },
     { path: '/', component: () => import('@/views/DashboardView.vue'), meta: { title: '工作台', requiresAuth: true } },
     { path: '/labs', component: () => import('@/views/LabsView.vue'), meta: { title: '实验室资源', requiresAuth: true } },
     { path: '/reservations', component: () => import('@/views/ReservationsView.vue'), meta: { title: '我的预约', requiresAuth: true } },
@@ -26,7 +32,8 @@ router.beforeEach((to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 
-  if (to.name === 'login' && hasToken) {
+  // 已登录用户不该再看到登录/注册页，直接送回工作台
+  if (hasToken && (to.name === 'login' || to.name === 'register')) {
     return { path: '/' }
   }
 })
