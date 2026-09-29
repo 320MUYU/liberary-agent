@@ -102,3 +102,20 @@ export function deleteEquipmentApi(equipmentId) {
     method: 'delete',
   })
 }
+
+// 预约审核列表由后端分页和筛选。
+export function getAdminReservationListApi(params) {
+  return request({
+    url: '/api/admin/reservation/list',
+    method: 'get',
+    params,
+  })
+}
+
+export function reviewReservationApi(reservationId, data) {
+  return request({
+    url: `/api/admin/reservation/${reservationId}/review`,
+    method: 'put',
+    data,
+  })
+}

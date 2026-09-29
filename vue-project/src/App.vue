@@ -25,6 +25,7 @@ const adminNavigation = [
   { label: '用户管理', path: '/admin/users', icon: 'UserFilled' },
   { label: '实验室管理', path: '/admin/labs', icon: 'School' },
   { label: '设备管理', path: '/admin/equipments', icon: 'Cpu' },
+  { label: '预约审核', path: '/admin/reservations', icon: 'Calendar' },
 ]
 const isAdmin = computed(() => userInfo.value?.role === 'admin')
 
@@ -140,13 +141,14 @@ onMounted(async () => {
         </div>
         <div class="topbar-actions">
           <el-popover placement="bottom-end" :width="330" trigger="click" popper-class="notification-popover">
-            <template #reference><button class="icon-button has-dot" aria-label="通知"><el-icon><Bell /></el-icon></button></template>
+            <template #reference><button class="icon-button" :class="{ 'has-dot': notifications.length > 0 }" aria-label="通知"><el-icon><Bell /></el-icon></button></template>
             <div class="notification-panel">
               <div class="notification-head"><strong>消息通知</strong><span>{{ notifications.length }} 条</span></div>
               <div v-for="item in notifications" :key="item.id" class="notification-item">
                 <span :class="`notice-dot ${item.type}`"></span>
                 <div><strong>{{ item.title }}</strong><p>{{ item.content }}</p><small>{{ item.time }}</small></div>
               </div>
+              <div v-if="!notifications.length" class="notification-empty">暂无通知</div>
             </div>
           </el-popover>
           <span class="top-divider"></span>
@@ -201,6 +203,7 @@ onMounted(async () => {
 .main-content { min-height: calc(100vh - 86px); padding: 30px 38px 42px; }
 .mobile-mask { display: none; }
 .notification-head { display: flex; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid #edf0eb; }.notification-head span { color: #80908e; font-size: 11px; }.notification-item { display: flex; gap: 11px; padding: 14px 0; border-bottom: 1px solid #edf0eb; }.notification-item:last-child { border: 0; }.notice-dot { width: 8px; height: 8px; flex: none; margin-top: 5px; border-radius: 50%; background: #71c9aa; }.notice-dot.warning { background: #e8a65b; }.notification-item strong { color: #1e3b3a; font-size: 12px; }.notification-item p { margin: 3px 0; color: #6e7e7c; font-size: 11px; line-height: 1.5; }.notification-item small { color: #9da8a6; font-size: 9px; }
+.notification-empty { padding: 24px 0 8px; color: #80908e; font-size: 12px; text-align: center; }
 .page-enter-active, .page-leave-active { transition: opacity .15s ease, transform .15s ease; }.page-enter-from { opacity: 0; transform: translateY(5px); }.page-leave-to { opacity: 0; transform: translateY(-3px); }
 @media (max-width: 900px) {
   .sidebar { transform: translateX(-105%); transition: transform .25s ease; }.sidebar.is-open { transform: translateX(0); }.mobile-mask { display: block; position: fixed; inset: 0; z-index: 29; background: rgba(9, 31, 32, .45); backdrop-filter: blur(2px); }.page-shell { width: 100%; margin-left: 0; }.menu-button { display: grid; place-items: center; }.topbar { padding: 0 20px; }.main-content { padding: 24px 20px 36px; }
