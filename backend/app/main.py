@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.models.users import User
+from app.config import UPLOAD_DIR
 from app.database import Base, create_database_if_not_exists, engine
 from app.api import api
 from app.common.exceptions import (
@@ -38,12 +40,14 @@ app.add_middleware(
 
 app.include_router(api)
 
+# 把上传目录挂成静态资源，上传接口返回的 /uploads/xxx 才能直接访问
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
 # 注册异常处理器
 app.add_exception_handler(BusinessException, business_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, global_exception_handler)
-
 
 @app.get("/")
 def root():

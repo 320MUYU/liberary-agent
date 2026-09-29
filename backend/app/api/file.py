@@ -3,6 +3,11 @@ from pathlib import Path
 import os
 from app.config import ALLOWED_EXTENSIONS, MAX_FILE_SIZE
 from app.common.exceptions import BusinessException
+import time
+import uuid
+import shutil
+from app.common.response import Response
+from app.config import UPLOAD_DIR
 
 router = APIRouter(prefix="/file",tags=["文件管理"])
 
@@ -24,3 +29,21 @@ def upload(file: UploadFile = File(...)):
         raise BusinessException(
             message=f"文件不能超过 {MAX_FILE_SIZE // 1024 // 1024}MB"
         )
+
+    # 设置唯一的文件名称
+    disk_name = f"{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}{ext}"
+    # 文件存储的实际路径
+    save_path = UPLOAD_DIR / disk_name
+
+    # 流式写文件
+    with open(save_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    return Response.success(
+        data={
+            "original_name": original_name,
+            "disk_name": disk_name,
+            "size": file.size,
+            "url": f"/uploads/{disk_name}",
+        }
+    )
