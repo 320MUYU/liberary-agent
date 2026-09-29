@@ -33,6 +33,9 @@ export function useAuthStore() {
     clearAuthStorage()
     token.value = null
     userInfo.value = null
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('labmind:logout'))
+    }
   }
 
   return {

@@ -85,6 +85,20 @@ export const notifications = reactive([])
 let bookingsPending = null
 let loadedUserId = null
 let pendingUserId = null
+let bookingRequestVersion = 0
+
+export function clearBookings() {
+  bookingRequestVersion += 1
+  bookingsPending = null
+  pendingUserId = null
+  loadedUserId = null
+  bookings.splice(0)
+  notifications.splice(0)
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('labmind:logout', clearBookings)
+}
 
 function displayBooking(record) {
   return {
@@ -106,16 +120,30 @@ function displayBooking(record) {
 
 export function loadBookings(force = false) {
   const userId = getUserInfo()?.id
+  if (!userId) {
+    clearBookings()
+    return Promise.resolve(bookings)
+  }
   if (loadedUserId !== userId) {
+    bookingRequestVersion += 1
+    bookingsPending = null
+    pendingUserId = null
     bookings.splice(0)
     loadedUserId = userId
   }
-  if (bookingsPending && pendingUserId === userId) return bookingsPending
+  if (bookingsPending && pendingUserId === userId && !force) return bookingsPending
   if (bookings.length && !force) return Promise.resolve(bookings)
   pendingUserId = userId
+  const requestVersion = ++bookingRequestVersion
   const request = getMyReservationsApi()
     .then((records) => {
-      if (loadedUserId === userId) bookings.splice(0, bookings.length, ...records.map(displayBooking))
+      if (
+        getUserInfo()?.id === userId
+        && loadedUserId === userId
+        && requestVersion === bookingRequestVersion
+      ) {
+        bookings.splice(0, bookings.length, ...records.map(displayBooking))
+      }
       return bookings
     })
     .finally(() => { if (bookingsPending === request) bookingsPending = null })
@@ -124,17 +152,30 @@ export function loadBookings(force = false) {
 }
 
 export async function addBooking(data) {
+  const userId = getUserInfo()?.id
   const record = await createReservationApi({
     lab_id: Number(data.labId), date: data.date, start: data.start, end: data.end,
     people: data.people, purpose: data.purpose, note: data.note,
   })
   const booking = displayBooking(record)
+  if (getUserInfo()?.id !== userId) return booking
+  bookingRequestVersion += 1
+  bookingsPending = null
+  pendingUserId = null
+  loadedUserId = userId
+  const existingIndex = bookings.findIndex((item) => item.id === booking.id)
+  if (existingIndex !== -1) bookings.splice(existingIndex, 1)
   bookings.unshift(booking)
   return booking
 }
 
 export async function cancelBooking(id) {
+  const userId = getUserInfo()?.id
   const record = await cancelReservationApi(id)
+  if (getUserInfo()?.id !== userId) return
+  bookingRequestVersion += 1
+  bookingsPending = null
+  pendingUserId = null
   const index = bookings.findIndex((item) => item.id === id)
   if (index !== -1) bookings.splice(index, 1, displayBooking(record))
 }
