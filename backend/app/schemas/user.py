@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class UserResponse(BaseModel):
@@ -27,3 +27,33 @@ class UserUpdateRequest(BaseModel):
     email: str | None = Field(default=None, max_length=50, description="邮箱")
     phone: str | None = Field(default=None, max_length=50, description="手机号")
     avatar: str | None = Field(default=None, max_length=50, description="头像 url")
+
+
+class PasswordUpdateRequest(BaseModel):
+    """修改密码的请求参数
+
+    长度限制（6-32 位）与注册时保持一致，否则会出现"注册不让设的密码，
+    改密码反而能设"的漏洞。
+    confirm_password 和注册一样只在这一次校验里用，不落库。
+    """
+
+    old_password: str = Field(min_length=6, max_length=32, description="原密码")
+    new_password: str = Field(
+        min_length=6, max_length=32, description="新密码：6-32 位"
+    )
+    confirm_password: str = Field(description="确认新密码：仅用于校验，不落库")
+
+    @model_validator(mode="after")
+    def validate_password(self):
+        """跨字段校验：这两条都只看请求参数本身，不碰数据库
+
+        - "两次输入不一致"是手滑，属于参数错误
+        - "新旧密码相同"这里先拦一道，省掉一次没意义的 bcrypt 计算；
+          真正的"原密码对不对"要查库比对密文，只能放在接口里做
+        """
+        if self.new_password != self.confirm_password:
+            raise ValueError("两次输入的新密码不一致")
+        if self.new_password == self.old_password:
+            raise ValueError("新密码不能跟原密码相同")
+        return self
+
