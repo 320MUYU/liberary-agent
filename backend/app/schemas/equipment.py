@@ -41,3 +41,10 @@ class EquipmentCreateRequest(BaseModel):
 
 class EquipmentUpdateRequest(EquipmentCreateRequest):
     """修改设备：字段与新增一致，PUT 全量更新"""
+
+
+class EquipmentPageResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[EquipmentResponse]

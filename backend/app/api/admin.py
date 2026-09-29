@@ -7,6 +7,7 @@ from app.common.exceptions import BusinessException
 from app.common.response import Response
 from app.database import get_db
 from app.dependencies.auth import get_current_admin
+from app.models.equipments import Equipment
 from app.models.labs import Lab
 from app.models.users import User
 from app.schemas.admin import (
@@ -14,6 +15,12 @@ from app.schemas.admin import (
     UserPageResponse,
     UserRoleUpdateRequest,
     UserStatusUpdateRequest,
+)
+from app.schemas.equipment import (
+    EquipmentCreateRequest,
+    EquipmentPageResponse,
+    EquipmentResponse,
+    EquipmentUpdateRequest,
 )
 from app.schemas.lab import (
     LabCreateRequest,
@@ -311,12 +318,136 @@ def delete_lab(
     """
     lab = _get_lab_or_404(lab_id, db)
 
+    # 这里数的是设备记录的条数（"种"），不是把 total 加起来得到的台数
     equipment_count = len(lab.equipments)
     db.delete(lab)
     db.commit()
 
     message = "实验室已删除"
     if equipment_count:
-        message = f"实验室及其 {equipment_count} 台设备已删除"
+        message = f"实验室及其 {equipment_count} 种设备已删除"
 
     return Response.success(message=message)
+
+
+# ============ 设备管理 ============
+
+
+def _get_equipment_or_404(equipment_id: int, db: Session) -> Equipment:
+    equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
+    if not equipment:
+        raise BusinessException(code=404, message="设备不存在")
+    return equipment
+
+
+@router.get("/equipment/list")
+def admin_list_equipments(
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    lab_id: int | None = Query(None, description="只查某间实验室的设备"),
+    keyword: str | None = Query(None, description="按设备名称或型号模糊搜索"),
+    status: str | None = Query(None, description="按状态筛选"),
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """分页查询设备（管理端）
+
+    lab_id 是可选参数：传了就只查这间实验室的设备（管理页面用它做联动筛选），
+    不传就是全平台的设备。这里用 is not None 判断，原因和用户列表的 status 一样。
+    """
+    query = db.query(Equipment)
+
+    if lab_id is not None:
+        query = query.filter(Equipment.lab_id == lab_id)
+
+    if keyword and keyword.strip():
+        pattern = f"%{keyword.strip()}%"
+        # model 可能为空，SQL 里 NULL LIKE '%x%' 的结果是 NULL（不是真），
+        # 所以型号为空的设备在按型号搜索时不会命中，这是符合预期的
+        query = query.filter(
+            or_(Equipment.name.like(pattern), Equipment.model.like(pattern))
+        )
+
+    if status:
+        query = query.filter(Equipment.status == status)
+
+    total = query.count()
+    items = (
+        query.order_by(Equipment.lab_id, Equipment.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return Response.success(
+        data=EquipmentPageResponse(
+            total=total,
+            page=page,
+            page_size=page_size,
+            items=[EquipmentResponse.model_validate(item) for item in items],
+        )
+    )
+
+
+@router.post("/equipment")
+def create_equipment(
+    data: EquipmentCreateRequest,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """新增设备"""
+    # 先确认实验室存在：外键约束也会拦下不存在的 lab_id，
+    # 但那抛出来的是 IntegrityError（500），这里能给出一句人话（404）
+    _get_lab_or_404(data.lab_id, db)
+
+    equipment = Equipment(**data.model_dump())
+    db.add(equipment)
+    db.commit()
+    db.refresh(equipment)
+
+    return Response.success(
+        message="设备已新增", data=EquipmentResponse.model_validate(equipment)
+    )
+
+
+@router.put("/equipment/{equipment_id}")
+def update_equipment(
+    equipment_id: int,
+    data: EquipmentUpdateRequest,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """修改设备（全量更新）
+
+    lab_id 也是全量更新的一部分，所以设备可以被改挂到另一间实验室。
+    """
+    equipment = _get_equipment_or_404(equipment_id, db)
+    _get_lab_or_404(data.lab_id, db)
+
+    for field, value in data.model_dump().items():
+        setattr(equipment, field, value)
+
+    db.commit()
+    db.refresh(equipment)
+
+    return Response.success(
+        message="设备已更新", data=EquipmentResponse.model_validate(equipment)
+    )
+
+
+@router.delete("/equipment/{equipment_id}")
+def delete_equipment(
+    equipment_id: int,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """删除设备
+
+    不检查预约记录：预约表还没建。等预约落地之后，这里要改成
+    "有未完成预约引用这台设备就不允许删"，否则会删掉学生预约指向的设备。
+    """
+    equipment = _get_equipment_or_404(equipment_id, db)
+    db.delete(equipment)
+    db.commit()
+
+    return Response.success(message="设备已删除")
