@@ -33,6 +33,15 @@ export function updateUserInfoApi(data) {
   })
 }
 
+// 修改密码：后端会先验原密码，通过后才写入新密码的密文
+export function updatePasswordApi(data) {
+  return request({
+    url: '/api/user/password',
+    method: 'put',
+    data,
+  })
+}
+
 // 上传文件：FormData 交给 axios 自动设 multipart 边界，不要手动写 Content-Type
 export function uploadFileApi(file) {
   const formData = new FormData()

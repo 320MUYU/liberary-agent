@@ -1,10 +1,17 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getUserInfoApi, updateUserInfoApi, uploadFileApi } from '@/authApi'
+import {
+  getUserInfoApi,
+  updatePasswordApi,
+  updateUserInfoApi,
+  uploadFileApi,
+} from '@/authApi'
 import { useAuthStore } from '@/store/authStore'
 
-const { userInfo, updateUser } = useAuthStore()
+const router = useRouter()
+const { userInfo, updateUser, logout } = useAuthStore()
 
 const formRef = ref()
 const loading = ref(false)
@@ -34,6 +41,61 @@ function resolveUrl(path) {
   if (!path) return ''
   if (/^https?:\/\//.test(path)) return path
   return `${import.meta.env.VITE_API_BASE_URL}${path}`
+}
+
+// 修改密码表单：和资料表单分开，两个表单各自独立校验、独立提交
+const pwdFormRef = ref()
+const pwdSaving = ref(false)
+const pwdForm = reactive({
+  old_password: '',
+  new_password: '',
+  confirm_password: '',
+})
+
+// 与后端 PasswordUpdateRequest 的规则保持一致；前端校验只为提示更即时，
+// 请求可以绕过浏览器直接发，后端才是最终防线
+function validateNewPassword(rule, value, callback) {
+  if (!value) {
+    callback(new Error('请输入新密码'))
+    return
+  }
+
+  if (value === pwdForm.old_password) {
+    callback(new Error('新密码不能跟原密码相同'))
+    return
+  }
+
+  callback()
+}
+
+function validateConfirmPassword(rule, value, callback) {
+  if (!value) {
+    callback(new Error('请再次输入新密码'))
+    return
+  }
+
+  if (value !== pwdForm.new_password) {
+    callback(new Error('两次输入的新密码不一致'))
+    return
+  }
+
+  callback()
+}
+
+const pwdRules = {
+  old_password: [
+    { required: true, message: '请输入原密码', trigger: 'blur' },
+    { min: 6, max: 32, message: '密码长度需为 6-32 位', trigger: 'blur' },
+  ],
+  new_password: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 6, max: 32, message: '密码长度需为 6-32 位', trigger: 'blur' },
+    { validator: validateNewPassword, trigger: 'blur' },
+  ],
+  confirm_password: [
+    { required: true, message: '请再次输入新密码', trigger: 'blur' },
+    { validator: validateConfirmPassword, trigger: 'blur' },
+  ],
 }
 
 const avatarUrl = computed(() => resolveUrl(form.avatar))
@@ -113,6 +175,31 @@ async function save() {
     saving.value = false
   }
 }
+
+async function changePassword() {
+  if (pwdSaving.value) return
+
+  const valid = await pwdFormRef.value.validate().catch(() => false)
+  if (!valid) return
+
+  pwdSaving.value = true
+  try {
+    await updatePasswordApi({ ...pwdForm })
+    ElMessage.success('密码已修改，请使用新密码重新登录')
+
+    // 后端签发的 token 是无状态的，改密码不会让旧 token 立刻作废（要等到过期）。
+    // 所以这里主动清掉本地登录态、跳回登录页：一是让用户重新用新密码登录，
+    // 二是避免"改了密码但页面还停在登录状态"造成的错觉。
+    // 注意顺序：必须先 logout 再跳转，否则路由守卫看到本地还有 token，
+    // 会把登录页直接重定向回工作台。
+    logout()
+    await router.replace({ name: 'login', query: { username: form.username } })
+  } catch {
+    // 错误提示已由请求拦截器统一处理
+  } finally {
+    pwdSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -177,6 +264,65 @@ async function save() {
         </el-form>
       </div>
     </section>
+
+    <section class="security-card surface">
+      <div class="panel-head">
+        <h2>修改密码</h2>
+        <p>为了账号安全，修改成功后需要退出并用新密码重新登录</p>
+      </div>
+
+      <el-form
+        ref="pwdFormRef"
+        :model="pwdForm"
+        :rules="pwdRules"
+        label-position="top"
+        @submit.prevent
+      >
+        <el-form-item label="原密码" prop="old_password">
+          <el-input
+            v-model="pwdForm.old_password"
+            type="password"
+            show-password
+            maxlength="32"
+            placeholder="请输入当前登录密码"
+          >
+            <template #prefix><el-icon><Lock /></el-icon></template>
+          </el-input>
+        </el-form-item>
+
+        <div class="form-row">
+          <el-form-item label="新密码" prop="new_password">
+            <el-input
+              v-model="pwdForm.new_password"
+              type="password"
+              show-password
+              maxlength="32"
+              placeholder="6-32 位"
+            >
+              <template #prefix><el-icon><Key /></el-icon></template>
+            </el-input>
+          </el-form-item>
+
+          <el-form-item label="确认新密码" prop="confirm_password">
+            <el-input
+              v-model="pwdForm.confirm_password"
+              type="password"
+              show-password
+              maxlength="32"
+              placeholder="再次输入新密码"
+            >
+              <template #prefix><el-icon><Key /></el-icon></template>
+            </el-input>
+          </el-form-item>
+        </div>
+
+        <div class="panel-actions">
+          <el-button type="primary" :loading="pwdSaving" @click="changePassword">
+            确认修改
+          </el-button>
+        </div>
+      </el-form>
+    </section>
   </div>
 </template>
 
@@ -202,9 +348,16 @@ async function save() {
 .panel-head h2 { color: var(--ink); font-family: Georgia, 'Noto Serif SC', serif; font-size: 19px; }
 .panel-head p { margin-top: 4px; color: var(--muted); font-size: 11px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.form-panel :deep(.el-form-item__label) { padding-bottom: 6px; color: #345452; font-size: 12px; font-weight: 700; }
-.form-panel :deep(.el-input__prefix) { color: #7b918e; }
+.form-panel :deep(.el-form-item__label),
+.security-card :deep(.el-form-item__label) { padding-bottom: 6px; color: #345452; font-size: 12px; font-weight: 700; }
+.form-panel :deep(.el-input__prefix),
+.security-card :deep(.el-input__prefix) { color: #7b918e; }
 .panel-actions { display: flex; justify-content: flex-end; padding-top: 6px; }
+
+.security-card { margin-top: 18px; padding: 28px 30px; }
+/* 密码输入框都很短，限宽避免在宽卡片里被拉成一整条 */
+.security-card :deep(.el-form) { max-width: 560px; }
+.security-card .panel-actions { justify-content: flex-start; }
 
 @media (max-width: 640px) {
   .profile-card { grid-template-columns: 1fr; }
