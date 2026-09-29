@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, Query
+from datetime import datetime
+
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -9,7 +11,9 @@ from app.database import get_db
 from app.dependencies.auth import get_current_admin
 from app.models.equipments import Equipment
 from app.models.labs import Lab
+from app.models.reservations import Reservation
 from app.models.users import User
+from app.api.reservation import approved_conflict
 from app.schemas.admin import (
     ResetPasswordRequest,
     UserPageResponse,
@@ -29,6 +33,11 @@ from app.schemas.lab import (
     LabUpdateRequest,
 )
 from app.schemas.user import UserResponse
+from app.schemas.reservation import (
+    ReservationPageResponse,
+    ReservationReviewRequest,
+    reservation_response,
+)
 from app.utils.bcrypt import hash_password
 
 router = APIRouter(prefix="/admin", tags=["管理员接口"])
@@ -309,14 +318,10 @@ def delete_lab(
     _: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """删除实验室
-
-    会连带删掉这间实验室下的所有设备（模型里配了 cascade）。
-    之所以敢直接级联，是因为设备本来就依附于实验室、脱离实验室没有意义。
-    等预约表建起来之后，这里要改成"有预约记录就不允许删"，否则会删掉
-    学生预约所指向的实验室——那属于数据丢失，不是数据清理。
-    """
+    """没有预约记录时删除实验室及其设备。"""
     lab = _get_lab_or_404(lab_id, db)
+    if db.query(Reservation.id).filter(Reservation.lab_id == lab_id).first():
+        raise BusinessException(code=409, message="实验室已有预约记录，不能删除")
 
     # 这里数的是设备记录的条数（"种"），不是把 total 加起来得到的台数
     equipment_count = len(lab.equipments)
@@ -441,13 +446,98 @@ def delete_equipment(
     _: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """删除设备
-
-    不检查预约记录：预约表还没建。等预约落地之后，这里要改成
-    "有未完成预约引用这台设备就不允许删"，否则会删掉学生预约指向的设备。
-    """
+    """删除设备；预约当前只关联实验室，不单独关联设备。"""
     equipment = _get_equipment_or_404(equipment_id, db)
     db.delete(equipment)
     db.commit()
 
     return Response.success(message="设备已删除")
+
+
+# ============ 预约审核 ============
+
+
+@router.get("/reservation/list")
+def admin_list_reservations(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    status: str | None = Query(None, description="预约状态"),
+    keyword: str | None = Query(None, description="实验室、房间号或申请人"),
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Reservation).join(Reservation.lab).join(Reservation.applicant)
+    if status:
+        if status not in ("pending", "approved", "rejected", "cancelled"):
+            raise BusinessException(message="无效的预约状态")
+        query = query.filter(Reservation.status == status)
+    if keyword and keyword.strip():
+        pattern = f"%{keyword.strip()}%"
+        query = query.filter(
+            or_(Lab.name.like(pattern), Lab.code.like(pattern), User.name.like(pattern))
+        )
+    total = query.count()
+    items = (
+        query.order_by(Reservation.create_time.desc(), Reservation.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return Response.success(
+        data=ReservationPageResponse(
+            total=total,
+            page=page,
+            page_size=page_size,
+            items=[reservation_response(item) for item in items],
+        )
+    )
+
+
+@router.put("/reservation/{reservation_id}/review")
+def review_reservation(
+    reservation_id: int,
+    data: ReservationReviewRequest,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    existing = db.query(Reservation).filter(Reservation.id == reservation_id).first()
+    if not existing:
+        raise BusinessException(code=404, message="预约不存在")
+
+    # 同一实验室的审核按顺序处理，防止并发通过重叠时段。
+    lab = db.query(Lab).filter(Lab.id == existing.lab_id).with_for_update().first()
+    reservation = (
+        db.query(Reservation)
+        .filter(Reservation.id == reservation_id)
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+    if reservation.status != "pending":
+        raise BusinessException(code=409, message="该预约已处理，不能重复审核")
+    if data.status == "approved":
+        now = datetime.now()
+        if (reservation.date, reservation.start) <= (now.date(), now.strftime("%H:%M")):
+            raise BusinessException(code=409, message="预约时间已过，不能通过")
+        if lab.status == "maintenance":
+            raise BusinessException(code=409, message="实验室维护中，不能通过预约")
+        if reservation.people > lab.capacity:
+            raise BusinessException(code=409, message="预约人数超过当前实验室容量")
+        if approved_conflict(
+            db,
+            reservation.lab_id,
+            reservation.date,
+            reservation.start,
+            reservation.end,
+            exclude_id=reservation.id,
+        ):
+            raise BusinessException(code=409, message="该时段已有通过的预约")
+
+    reservation.status = data.status
+    reservation.review_note = data.review_note.strip() if data.review_note else None
+    reservation.reviewer_id = current_admin.id
+    reservation.reviewed_at = datetime.now()
+    db.commit()
+    db.refresh(reservation)
+    message = "预约已通过" if data.status == "approved" else "预约已驳回"
+    return Response.success(message=message, data=reservation_response(reservation))
