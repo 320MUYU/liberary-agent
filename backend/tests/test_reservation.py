@@ -1,6 +1,8 @@
 import unittest
 from datetime import date, timedelta
 
+from pydantic import ValidationError
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -10,6 +12,7 @@ from app.api.reservation import cancel_reservation, create_reservation, my_reser
 from app.common.exceptions import BusinessException
 from app.database import Base
 from app.models.labs import Lab
+from app.models.reservations import Reservation
 from app.models.users import User
 from app.schemas.reservation import ReservationCreateRequest, ReservationReviewRequest
 
@@ -80,7 +83,10 @@ class ReservationFlowTest(unittest.TestCase):
 
         with self.assertRaises(BusinessException) as repeated:
             review_reservation(
-                first.id, ReservationReviewRequest(status="rejected"), self.admin, self.db
+                first.id,
+                ReservationReviewRequest(status="rejected", review_note="重复处理"),
+                self.admin,
+                self.db,
             )
         self.assertEqual(repeated.exception.code, 409)
 
@@ -113,6 +119,35 @@ class ReservationFlowTest(unittest.TestCase):
         self.db.commit()
         with self.assertRaises(BusinessException):
             create_reservation(self.request(), self.student, self.db)
+
+    def test_rejection_reason_and_two_hour_rules(self):
+        with self.assertRaises(ValidationError):
+            ReservationReviewRequest(status="rejected", review_note="   ")
+
+        request = ReservationCreateRequest(
+            lab_id=self.lab.id,
+            date=date.today(),
+            start="00:00",
+            end="00:30",
+            people=2,
+            purpose="临时实验",
+        )
+        with self.assertRaises(BusinessException) as too_late:
+            create_reservation(request, self.student, self.db)
+        self.assertIn("提前 2 小时", too_late.exception.message)
+
+        approved = create_reservation(self.request(), self.student, self.db).data
+        review_reservation(
+            approved.id, ReservationReviewRequest(status="approved"), self.admin, self.db
+        )
+        reservation = self.db.query(Reservation).filter(Reservation.id == approved.id).one()
+        reservation.date = date.today()
+        reservation.start = "00:00"
+        reservation.end = "00:30"
+        self.db.commit()
+        with self.assertRaises(BusinessException) as too_late_to_cancel:
+            cancel_reservation(approved.id, self.student, self.db)
+        self.assertIn("2 小时内", too_late_to_cancel.exception.message)
 
 
 if __name__ == "__main__":

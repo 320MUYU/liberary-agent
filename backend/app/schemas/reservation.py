@@ -35,6 +35,14 @@ class ReservationReviewRequest(BaseModel):
     status: Literal["approved", "rejected"]
     review_note: str | None = Field(default=None, max_length=500)
 
+    @model_validator(mode="after")
+    def rejected_reason_required(self):
+        if self.status == "rejected" and not (self.review_note and self.review_note.strip()):
+            raise ValueError("驳回预约时必须填写理由")
+        if self.review_note:
+            self.review_note = self.review_note.strip()
+        return self
+
 
 class ReservationResponse(BaseModel):
     id: int

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
@@ -39,8 +39,9 @@ def create_reservation(
     db: Session = Depends(get_db),
 ):
     now = datetime.now()
-    if (data.date, data.start) <= (now.date(), now.strftime("%H:%M")):
-        raise BusinessException(message="预约开始时间需晚于当前时间")
+    starts_at = datetime.combine(data.date, datetime.strptime(data.start, "%H:%M").time())
+    if starts_at < now + timedelta(hours=2):
+        raise BusinessException(message="预约需至少提前 2 小时提交")
 
     # 审核也锁同一间实验室，避免提交与审核同时进行时遗漏时段冲突。
     lab = db.query(Lab).filter(Lab.id == data.lab_id).with_for_update().first()
@@ -105,6 +106,11 @@ def cancel_reservation(
     )
     if reservation.status not in ("pending", "approved"):
         raise BusinessException(code=409, message="当前状态不能取消预约")
+    starts_at = datetime.combine(
+        reservation.date, datetime.strptime(reservation.start, "%H:%M").time()
+    )
+    if starts_at < datetime.now() + timedelta(hours=2):
+        raise BusinessException(code=409, message="预约开始前 2 小时内不能取消")
     reservation.status = "cancelled"
     db.commit()
     db.refresh(reservation)
