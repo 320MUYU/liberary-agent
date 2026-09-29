@@ -1,17 +1,25 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.common.exceptions import BusinessException
 from app.common.response import Response
 from app.database import get_db
 from app.dependencies.auth import get_current_admin
+from app.models.labs import Lab
 from app.models.users import User
 from app.schemas.admin import (
     ResetPasswordRequest,
     UserPageResponse,
     UserRoleUpdateRequest,
     UserStatusUpdateRequest,
+)
+from app.schemas.lab import (
+    LabCreateRequest,
+    LabPageResponse,
+    LabResponse,
+    LabUpdateRequest,
 )
 from app.schemas.user import UserResponse
 from app.utils.bcrypt import hash_password
@@ -158,3 +166,157 @@ def reset_user_password(
     db.commit()
 
     return Response.success(message="密码已重置")
+
+
+# ============ 实验室管理 ============
+
+
+def _get_lab_or_404(lab_id: int, db: Session) -> Lab:
+    lab = db.query(Lab).filter(Lab.id == lab_id).first()
+    if not lab:
+        raise BusinessException(code=404, message="实验室不存在")
+    return lab
+
+
+def _ensure_code_available(
+    code: str, db: Session, exclude_lab_id: int | None = None
+) -> None:
+    """房间号查重
+
+    exclude_lab_id 用在修改的场景：一间实验室改其它字段时，
+    它自己的房间号当然算"被占用"，所以要把它自己排除掉。
+    """
+    query = db.query(Lab).filter(Lab.code == code)
+    if exclude_lab_id is not None:
+        query = query.filter(Lab.id != exclude_lab_id)
+    if query.first():
+        raise BusinessException(code=409, message=f"房间号 {code} 已被其它实验室占用")
+
+
+@router.get("/lab/list")
+def admin_list_labs(
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    keyword: str | None = Query(None, description="按名称、房间号或楼栋模糊搜索"),
+    category: str | None = Query(None, description="按类别筛选"),
+    status: str | None = Query(None, description="按状态筛选"),
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """分页查询实验室（管理端）"""
+    query = db.query(Lab)
+
+    if keyword and keyword.strip():
+        pattern = f"%{keyword.strip()}%"
+        query = query.filter(
+            or_(
+                Lab.name.like(pattern),
+                Lab.code.like(pattern),
+                Lab.building.like(pattern),
+            )
+        )
+
+    if category:
+        query = query.filter(Lab.category == category)
+
+    if status:
+        query = query.filter(Lab.status == status)
+
+    total = query.count()
+    items = (
+        query.order_by(Lab.code)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return Response.success(
+        data=LabPageResponse(
+            total=total,
+            page=page,
+            page_size=page_size,
+            items=[LabResponse.model_validate(item) for item in items],
+        )
+    )
+
+
+@router.post("/lab")
+def create_lab(
+    data: LabCreateRequest,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """新增实验室"""
+    _ensure_code_available(data.code, db)
+
+    lab = Lab(**data.model_dump())
+    try:
+        db.add(lab)
+        db.commit()
+        db.refresh(lab)
+    except IntegrityError as exc:
+        # 兜底：上面查重和这里插入之间有时间差，并发时两个请求可能都查到
+        # "不存在"，最终由数据库的唯一索引拦下第二个。
+        # 这里必须 rollback，否则 session 会卡在"事务失败"状态，后续操作全报错。
+        db.rollback()
+        raise BusinessException(
+            code=409, message=f"房间号 {data.code} 已被其它实验室占用"
+        ) from exc
+
+    return Response.success(
+        message="实验室已创建", data=LabResponse.model_validate(lab)
+    )
+
+
+@router.put("/lab/{lab_id}")
+def update_lab(
+    lab_id: int,
+    data: LabUpdateRequest,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """修改实验室（全量更新）"""
+    lab = _get_lab_or_404(lab_id, db)
+    _ensure_code_available(data.code, db, exclude_lab_id=lab_id)
+
+    for field, value in data.model_dump().items():
+        setattr(lab, field, value)
+
+    try:
+        db.commit()
+        db.refresh(lab)
+    except IntegrityError as exc:
+        db.rollback()
+        raise BusinessException(
+            code=409, message=f"房间号 {data.code} 已被其它实验室占用"
+        ) from exc
+
+    return Response.success(
+        message="实验室已更新", data=LabResponse.model_validate(lab)
+    )
+
+
+@router.delete("/lab/{lab_id}")
+def delete_lab(
+    lab_id: int,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """删除实验室
+
+    会连带删掉这间实验室下的所有设备（模型里配了 cascade）。
+    之所以敢直接级联，是因为设备本来就依附于实验室、脱离实验室没有意义。
+    等预约表建起来之后，这里要改成"有预约记录就不允许删"，否则会删掉
+    学生预约所指向的实验室——那属于数据丢失，不是数据清理。
+    """
+    lab = _get_lab_or_404(lab_id, db)
+
+    equipment_count = len(lab.equipments)
+    db.delete(lab)
+    db.commit()
+
+    message = "实验室已删除"
+    if equipment_count:
+        message = f"实验室及其 {equipment_count} 台设备已删除"
+
+    return Response.success(message=message)

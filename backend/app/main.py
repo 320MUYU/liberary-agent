@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.models.users import User
+import app.models  # noqa: F401  导入模型包，把全部表注册到 Base.metadata
 from app.config import UPLOAD_DIR
 from app.database import Base, create_database_if_not_exists, engine
 from app.api import api

@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.database import Base, SessionLocal, engine  # noqa: E402
-from app.models.users import User  # noqa: E402
+from app.models import Equipment, Lab, User  # noqa: E402
 from app.utils.bcrypt import hash_password  # noqa: E402
 
 
@@ -62,6 +62,153 @@ def ensure_admin(db) -> None:
         print("       （密码是随机生成的，登录后可以到「个人信息」页面自行修改）")
 
 
+# 原来写死在前端 labStore.js 里的那 6 间实验室，落库后作为初始数据。
+# 结构：(实验室字段, 设备列表)，设备每项是 (名称, 型号, 总数, 可用数, 状态)
+SEED_LABS = [
+    (
+        dict(
+            name="智能感知实验室",
+            code="A-301",
+            building="信息楼 A区",
+            floor="3F",
+            capacity=24,
+            category="人工智能",
+            status="available",
+            description="面向机器视觉、深度学习和智能感知实验，配备高性能 GPU 集群。",
+        ),
+        [
+            ("GPU 工作站", "RTX 4090", 6, 5, "normal"),
+            ("机器视觉平台", "MV-VS1200", 4, 4, "normal"),
+            ("边缘计算盒", "Jetson Orin", 8, 6, "normal"),
+        ],
+    ),
+    (
+        dict(
+            name="网络安全实验室",
+            code="B-408",
+            building="信息楼 B区",
+            floor="4F",
+            capacity=32,
+            category="网络安全",
+            status="busy",
+            description="支持网络攻防、密码学和安全审计等综合实践教学。",
+        ),
+        [
+            ("攻防靶场平台", "CyberRange-200", 2, 2, "normal"),
+            ("网络分析仪", "N9020B", 3, 1, "repair"),
+            ("服务器集群", "PowerEdge R750", 12, 10, "normal"),
+        ],
+    ),
+    (
+        dict(
+            name="嵌入式系统实验室",
+            code="C-205",
+            building="工程训练中心",
+            floor="2F",
+            capacity=20,
+            category="嵌入式",
+            status="available",
+            description="提供嵌入式开发、物联网与电子系统设计所需的软硬件环境。",
+        ),
+        [
+            ("数字示波器", "Tektronix MDO34", 6, 6, "normal"),
+            ("STM32 开发套件", "STM32F407", 20, 18, "normal"),
+            ("逻辑分析仪", "Logic Pro 16", 5, 4, "normal"),
+        ],
+    ),
+    (
+        dict(
+            name="数字媒体实验室",
+            code="D-602",
+            building="创新中心",
+            floor="6F",
+            capacity=28,
+            category="数字媒体",
+            status="available",
+            description="适合虚拟现实、数字内容创作、人机交互与三维动画项目。",
+        ),
+        [
+            ("动作捕捉系统", "OptiTrack Prime 41", 2, 2, "normal"),
+            ("VR 头显", "Meta Quest 3", 10, 9, "normal"),
+            ("图形工作站", "ThinkStation P620", 8, 7, "normal"),
+        ],
+    ),
+    (
+        dict(
+            name="云计算联合实验室",
+            code="A-507",
+            building="信息楼 A区",
+            floor="5F",
+            capacity=36,
+            category="云计算",
+            status="maintenance",
+            description="部署私有云教学平台，满足分布式计算和云原生实践需求。",
+        ),
+        [
+            ("云平台节点", "PowerEdge R760", 8, 6, "normal"),
+            ("存储阵列", "NetApp AFF A250", 2, 2, "normal"),
+            ("高速交换机", "Nexus 93180YC", 4, 3, "repair"),
+        ],
+    ),
+    (
+        dict(
+            name="大数据创新实验室",
+            code="B-503",
+            building="信息楼 B区",
+            floor="5F",
+            capacity=40,
+            category="大数据",
+            status="available",
+            description="支持数据采集、分布式处理、可视化和数据挖掘课程实践。",
+        ),
+        [
+            ("Hadoop 集群节点", "PowerEdge R750", 10, 9, "normal"),
+            ("数据可视化大屏", "Samsung QB75R", 2, 2, "normal"),
+            ("高性能服务器", "ProLiant DL380", 6, 5, "normal"),
+        ],
+    ),
+]
+
+
+def ensure_labs(db) -> None:
+    """按房间号补齐实验室及其设备
+
+    以 code（房间号）作为判重的依据：它是唯一索引，也是"这间实验室有没有
+    被登记过"最自然的判断标准。已经存在的整条跳过，不覆盖管理员后来改过的内容。
+    """
+    created = 0
+
+    for lab_data, equipments in SEED_LABS:
+        if db.query(Lab).filter(Lab.code == lab_data["code"]).first():
+            print(f"[跳过] 实验室已存在：{lab_data['name']}（{lab_data['code']}）")
+            continue
+
+        lab = Lab(**lab_data)
+        db.add(lab)
+        # flush 而不是 commit：先把 INSERT 发给数据库拿到自增的 lab.id，
+        # 后面建设备要用它做外键，但此时还没提交，出问题可以一起回滚
+        db.flush()
+
+        for name, model, total, available, status in equipments:
+            db.add(
+                Equipment(
+                    lab_id=lab.id,
+                    name=name,
+                    model=model,
+                    total=total,
+                    available=available,
+                    status=status,
+                )
+            )
+
+        db.commit()
+        created += 1
+        print(f"[新增] {lab_data['name']}（{lab_data['code']}），含 {len(equipments)} 种设备")
+
+    if not created:
+        print("[跳过] 实验室数据已经齐了")
+
+
 def main() -> None:
     # 建表：项目没有引入 Alembic，表结构靠 create_all 兜底。
     # 注意它只会创建"还不存在的表"，不会给已有的表增删字段。
@@ -70,6 +217,7 @@ def main() -> None:
     db = SessionLocal()
     try:
         ensure_admin(db)
+        ensure_labs(db)
     finally:
         db.close()
 
