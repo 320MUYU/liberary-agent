@@ -35,3 +35,19 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="用户被禁用"
         )
     return user
+
+
+def get_current_admin(current_user: User = Depends(get_current_user)):
+    """在"已登录"的基础上再要求管理员身份
+
+    这里是管理员接口的唯一防线。前端把管理菜单藏起来只是体验问题，
+    请求可以绕过页面直接发，所以每个管理接口都必须挂上这个依赖。
+
+    返回 403 而不是 401：401 的语义是"没登录/登录失效"，前端拦截器收到 401
+    会清掉登录态跳登录页；而"登录了但不是管理员"不该把用户踢下线。
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="需要管理员权限"
+        )
+    return current_user
