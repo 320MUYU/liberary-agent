@@ -3,8 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getUserInfoApi } from '@/authApi'
-import { notifications } from '@/store/labStore'
+import { loadLabs, notifications } from '@/store/labStore'
 import { useAuthStore } from '@/store/authStore'
+import { resolveAssetUrl } from '@/utils/url.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,6 +23,7 @@ const navigation = [
 // 真正的拦截在后端接口的 get_current_admin 上。
 const adminNavigation = [
   { label: '用户管理', path: '/admin/users', icon: 'UserFilled' },
+  { label: '实验室管理', path: '/admin/labs', icon: 'School' },
 ]
 const isAdmin = computed(() => userInfo.value?.role === 'admin')
 
@@ -31,14 +33,7 @@ const userAvatar = computed(() => userName.value.slice(0, 1))
 const userRole = computed(() => ({ student: '学生', admin: '管理员' })[userInfo.value?.role] || '平台用户')
 const userCaption = computed(() => `${userInfo.value?.username || '账号'} · ${userRole.value}`)
 
-// 后端头像存的是相对路径 /uploads/xxx，展示时需拼上后端地址
-function resolveUrl(path) {
-  if (!path) return ''
-  if (/^https?:\/\//.test(path)) return path
-  return `${import.meta.env.VITE_API_BASE_URL}${path}`
-}
-
-const userAvatarUrl = computed(() => resolveUrl(userInfo.value?.avatar))
+const userAvatarUrl = computed(() => resolveAssetUrl(userInfo.value?.avatar))
 
 function navigate(path) {
   router.push(path)
@@ -60,6 +55,11 @@ function handleProfileCommand(command) {
 
 onMounted(async () => {
   if (!token.value) return
+
+  // 实验室列表在这里统一拉一次：预约弹窗可以从工作台、实验室资源、
+  // 我的预约、AI 助理四个入口打开，与其每个入口各拉一次，
+  // 不如在应用外壳里拉一次（loadLabs 内部有去重，不会重复请求）
+  loadLabs().catch(() => {})
 
   try {
     updateUser(await getUserInfoApi())

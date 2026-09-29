@@ -1,13 +1,82 @@
 import { reactive } from 'vue'
+import { getLabListApi } from '../labApi.js'
 
-export const labs = reactive([
-  { id: 1, name: '智能感知实验室', code: 'A-301', building: '信息楼 A区', floor: '3F', capacity: 24, category: '人工智能', status: 'available', nextFree: '今日 14:00', color: '#dceee8', accent: '#387d70', equipment: ['GPU 工作站', '机器视觉平台', '边缘计算盒'], description: '面向机器视觉、深度学习和智能感知实验，配备高性能 GPU 集群。', occupied: 68 },
-  { id: 2, name: '网络安全实验室', code: 'B-408', building: '信息楼 B区', floor: '4F', capacity: 32, category: '网络安全', status: 'busy', nextFree: '明日 09:00', color: '#e7e9f2', accent: '#59658f', equipment: ['攻防靶场', '网络分析仪', '服务器集群'], description: '支持网络攻防、密码学和安全审计等综合实践教学。', occupied: 86 },
-  { id: 3, name: '嵌入式系统实验室', code: 'C-205', building: '工程训练中心', floor: '2F', capacity: 20, category: '嵌入式', status: 'available', nextFree: '今日 16:00', color: '#f3e8d7', accent: '#9b7440', equipment: ['示波器', 'STM32 套件', '逻辑分析仪'], description: '提供嵌入式开发、物联网与电子系统设计所需的软硬件环境。', occupied: 52 },
-  { id: 4, name: '数字媒体实验室', code: 'D-602', building: '创新中心', floor: '6F', capacity: 28, category: '数字媒体', status: 'available', nextFree: '今日 13:30', color: '#f1dfde', accent: '#a75f5b', equipment: ['动作捕捉', 'VR 头显', '图形工作站'], description: '适合虚拟现实、数字内容创作、人机交互与三维动画项目。', occupied: 37 },
-  { id: 5, name: '云计算联合实验室', code: 'A-507', building: '信息楼 A区', floor: '5F', capacity: 36, category: '云计算', status: 'maintenance', nextFree: '9月25日', color: '#e1e9ed', accent: '#527488', equipment: ['云平台节点', '存储阵列', '高速交换机'], description: '部署私有云教学平台，满足分布式计算和云原生实践需求。', occupied: 0 },
-  { id: 6, name: '大数据创新实验室', code: 'B-503', building: '信息楼 B区', floor: '5F', capacity: 40, category: '大数据', status: 'available', nextFree: '明日 10:00', color: '#e2eddd', accent: '#638754', equipment: ['Hadoop 集群', '数据大屏', '高性能服务器'], description: '支持数据采集、分布式处理、可视化和数据挖掘课程实践。', occupied: 74 },
-])
+// 实验室数据现在来自后端（这里原来是写死的 6 条假数据）。
+// 仍然导出成 reactive 数组，是因为 LabsView / DashboardView / BookingDialog
+// 都直接遍历它渲染，保持这个形状可以让这些页面少改。
+export const labs = reactive([])
+
+let pending = null
+
+// 拉取实验室列表。多个页面同时挂载会一起调它，共用一个请求，不会重复打接口。
+// force=true 用于管理员改完数据后强制刷新。
+export function loadLabs(force = false) {
+  if (pending) return pending
+
+  if (labs.length && !force) return Promise.resolve(labs)
+
+  pending = getLabListApi()
+    .then((list) => {
+      // 用 splice 就地替换，而不是 labs.value = ...：保持对外暴露的
+      // 还是同一个数组对象，已经引用了它的组件不会失联
+      labs.splice(0, labs.length, ...list)
+      return labs
+    })
+    .finally(() => {
+      pending = null
+    })
+
+  return pending
+}
+
+// 卡片配色和图标按"类别"给。这类纯展示的取色不该存进数据库让管理员填，
+// 所以从原来每条数据里挪到了这里，统一按类别映射。
+const LAB_CATEGORY_STYLE = {
+  人工智能: { color: '#dceee8', accent: '#387d70' },
+  网络安全: { color: '#e7e9f2', accent: '#59658f' },
+  嵌入式: { color: '#f3e8d7', accent: '#9b7440' },
+  数字媒体: { color: '#f1dfde', accent: '#a75f5b' },
+  云计算: { color: '#e1e9ed', accent: '#527488' },
+  大数据: { color: '#e2eddd', accent: '#638754' },
+}
+
+const LAB_CATEGORY_ICON = {
+  人工智能: 'DataAnalysis',
+  网络安全: 'Lock',
+  嵌入式: 'Cpu',
+  数字媒体: 'VideoCamera',
+  云计算: 'Cloudy',
+  大数据: 'Histogram',
+}
+
+// 新类别（管理员自己加的）取不到预设值时给一套中性配色，不至于渲染成空白
+export function labStyle(category) {
+  return LAB_CATEGORY_STYLE[category] || { color: '#eaf0ee', accent: '#54807a' }
+}
+
+export function labIcon(category) {
+  return LAB_CATEGORY_ICON[category] || 'Histogram'
+}
+
+// 设备台数：按数量累加，不是按"设备种类"数
+export function labUnitCount(lab) {
+  return (lab.equipments || []).reduce((sum, item) => sum + item.total, 0)
+}
+
+// 设备完好率 = 状态正常的设备种类 / 全部设备种类。
+// 这是从真实设备数据算出来的，替换掉了原来手写的"利用率 68%"那种假数字。
+export function labHealthyRate(lab) {
+  const list = lab.equipments || []
+  if (!list.length) return 0
+  return Math.round((list.filter((item) => item.status === 'normal').length / list.length) * 100)
+}
+
+// 全部实验室的整体设备完好率，给页面顶部的统计用
+export function overallHealthyRate(list = labs) {
+  const all = list.flatMap((lab) => lab.equipments || [])
+  if (!all.length) return 0
+  return Math.round((all.filter((item) => item.status === 'normal').length / all.length) * 100)
+}
 
 const defaultBookings = [
   { id: 1001, labId: 1, lab: '智能感知实验室', room: 'A-301', date: '2026-09-22', start: '14:00', end: '16:00', purpose: '计算机视觉课程实验', people: 4, status: 'approved', createdAt: '2026-09-19' },

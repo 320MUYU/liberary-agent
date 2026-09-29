@@ -36,3 +36,37 @@ export function resetUserPasswordApi(userId, newPassword) {
     data: { new_password: newPassword },
   })
 }
+
+// 实验室管理
+export function getAdminLabListApi(params) {
+  return request({
+    url: '/api/admin/lab/list',
+    method: 'get',
+    params,
+  })
+}
+
+export function createLabApi(data) {
+  return request({
+    url: '/api/admin/lab',
+    method: 'post',
+    data,
+  })
+}
+
+// 全量更新：编辑弹窗会把整份表单提交回来，包括没改的字段
+export function updateLabApi(labId, data) {
+  return request({
+    url: `/api/admin/lab/${labId}`,
+    method: 'put',
+    data,
+  })
+}
+
+// 删除实验室会连带删掉它下面的所有设备
+export function deleteLabApi(labId) {
+  return request({
+    url: `/api/admin/lab/${labId}`,
+    method: 'delete',
+  })
+}

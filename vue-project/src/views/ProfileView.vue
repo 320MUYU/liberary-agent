@@ -9,6 +9,7 @@ import {
   uploadFileApi,
 } from '@/authApi'
 import { useAuthStore } from '@/store/authStore'
+import { resolveAssetUrl } from '@/utils/url.js'
 
 const router = useRouter()
 const { userInfo, updateUser, logout } = useAuthStore()
@@ -33,14 +34,6 @@ const rules = {
   ],
   email: [{ type: 'email', message: '邮箱格式不正确', trigger: 'blur' }],
   phone: [{ pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确', trigger: 'blur' }],
-}
-
-// 后端上传接口返回的是相对路径 /uploads/xxx，浏览器直接用不显示，
-// 需要拼上后端地址（VITE_API_BASE_URL）；已是完整 http 地址则原样返回
-function resolveUrl(path) {
-  if (!path) return ''
-  if (/^https?:\/\//.test(path)) return path
-  return `${import.meta.env.VITE_API_BASE_URL}${path}`
 }
 
 // 修改密码表单：和资料表单分开，两个表单各自独立校验、独立提交
@@ -98,7 +91,7 @@ const pwdRules = {
   ],
 }
 
-const avatarUrl = computed(() => resolveUrl(form.avatar))
+const avatarUrl = computed(() => resolveAssetUrl(form.avatar))
 const fallbackText = computed(() => (form.name || form.username || '用').slice(0, 1))
 
 function fillForm(user) {

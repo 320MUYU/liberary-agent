@@ -22,6 +22,7 @@ const router = createRouter({
     { path: '/assistant', component: () => import('@/views/AssistantView.vue'), meta: { title: 'AI 智能助理', requiresAuth: true } },
     { path: '/profile', component: () => import('@/views/ProfileView.vue'), meta: { title: '个人信息', requiresAuth: true } },
     { path: '/admin/users', component: () => import('@/views/admin/UserManageView.vue'), meta: { title: '用户管理', requiresAuth: true, requiresAdmin: true } },
+    { path: '/admin/labs', component: () => import('@/views/admin/LabManageView.vue'), meta: { title: '实验室管理', requiresAuth: true, requiresAdmin: true } },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior: () => ({ top: 0 }),

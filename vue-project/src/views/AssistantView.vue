@@ -1,13 +1,14 @@
 <script setup>
-import { nextTick, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import BookingDialog from '@/components/BookingDialog.vue'
-import { labs } from '@/store/labStore'
+import { labs, loadLabs } from '@/store/labStore'
 
 const input = ref('')
 const thinking = ref(false)
 const chatBody = ref()
 const bookingOpen = ref(false)
-const selectedLab = ref(labs[0])
+// 实验室是异步取的，首屏时 labs 还是空的，所以先给 null
+const selectedLab = ref(null)
 const showAgentTrace = ref(true)
 const suggestions = ['明天下午做机器视觉实验，4个人', '哪些实验室配有 GPU 工作站？', '嵌入式实验室的预约规则是什么？']
 const messages = ref([
@@ -37,7 +38,12 @@ function send(text = input.value) {
   }, 900)
 }
 
-function openBooking() { selectedLab.value = labs[0]; bookingOpen.value = true }
+function openBooking() { selectedLab.value = labs[0] || null; bookingOpen.value = true }
+
+onMounted(() => {
+  // 预约弹窗里要选实验室，先把列表拉回来
+  loadLabs().catch(() => {})
+})
 </script>
 
 <template>

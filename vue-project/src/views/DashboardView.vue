@@ -1,19 +1,30 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import BookingDialog from '@/components/BookingDialog.vue'
 import { useAuthStore } from '@/store/authStore'
-import { bookings, labs, statusMap } from '@/store/labStore'
+import { bookings, labIcon, labStyle, labs, loadLabs, statusMap } from '@/store/labStore'
 
 const router = useRouter()
 const { userInfo } = useAuthStore()
 const bookingOpen = ref(false)
-const selectedLab = ref(labs[0])
+// 实验室是进页面后异步取回来的，首屏这一刻 labs 还是空的，
+// 所以默认选中项先给 null，等接口回来再补上
+const selectedLab = ref(null)
 const upcoming = computed(() => bookings.filter((item) => ['approved', 'pending'].includes(item.status)).slice(0, 3))
 const approvedCount = computed(() => bookings.filter((item) => item.status === 'approved').length)
 const userName = computed(() => userInfo.value?.name || userInfo.value?.username || '同学')
 
-function openBooking(lab = labs[0]) { selectedLab.value = lab; bookingOpen.value = true }
+function openBooking(lab) { selectedLab.value = lab || labs[0] || null; bookingOpen.value = true }
+
+onMounted(async () => {
+  try {
+    await loadLabs()
+    if (!selectedLab.value) selectedLab.value = labs[0] || null
+  } catch {
+    // 错误提示由请求拦截器统一处理
+  }
+})
 function displayDate(date) { const [, month, day] = date.split('-'); return `${Number(month)}月${Number(day)}日` }
 </script>
 
@@ -71,8 +82,8 @@ function displayDate(date) { const [, month, day] = date.split('-'); return `${N
       <div class="section-heading"><div><h2>为你推荐</h2><p>依据你的专业与历史预约智能匹配</p></div><button class="text-action" @click="router.push('/labs')">浏览全部实验室 <el-icon><Right /></el-icon></button></div>
       <div class="recommend-grid">
         <article v-for="lab in labs.slice(0, 3)" :key="lab.id" class="recommend-card surface">
-          <div class="lab-illustration" :style="{ background: lab.color, color: lab.accent }"><el-icon><DataAnalysis v-if="lab.id === 1"/><Lock v-else-if="lab.id === 2"/><Cpu v-else/></el-icon><span>{{ lab.category }}</span></div>
-          <div class="recommend-body"><div class="lab-title"><strong>{{ lab.name }}</strong><el-tag v-if="lab.status === 'available'" type="success" effect="light" size="small">可预约</el-tag><el-tag v-else type="warning" effect="light" size="small">使用中</el-tag></div><p><el-icon><Location /></el-icon>{{ lab.building }} · {{ lab.code }}<span></span><el-icon><User /></el-icon>{{ lab.capacity }} 人</p><div class="equipment"><span v-for="tag in lab.equipment.slice(0, 2)" :key="tag">{{ tag }}</span></div><button :disabled="lab.status !== 'available'" @click="openBooking(lab)">{{ lab.status === 'available' ? '立即预约' : `最近空闲 ${lab.nextFree}` }}<el-icon><Right /></el-icon></button></div>
+          <div class="lab-illustration" :style="{ background: labStyle(lab.category).color, color: labStyle(lab.category).accent }"><el-icon><component :is="labIcon(lab.category)" /></el-icon><span>{{ lab.category }}</span></div>
+          <div class="recommend-body"><div class="lab-title"><strong>{{ lab.name }}</strong><el-tag v-if="lab.status === 'available'" type="success" effect="light" size="small">可预约</el-tag><el-tag v-else type="warning" effect="light" size="small">{{ lab.status === 'maintenance' ? '维护中' : '使用中' }}</el-tag></div><p><el-icon><Location /></el-icon>{{ lab.building }} · {{ lab.code }}<span></span><el-icon><User /></el-icon>{{ lab.capacity }} 人</p><div class="equipment"><span v-for="item in lab.equipments.slice(0, 2)" :key="item.id">{{ item.name }}</span></div><button :disabled="lab.status !== 'available'" @click="openBooking(lab)">{{ lab.status === 'available' ? '立即预约' : '暂不可约' }}<el-icon><Right /></el-icon></button></div>
         </article>
       </div>
     </section>
