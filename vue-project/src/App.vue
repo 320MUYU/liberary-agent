@@ -18,6 +18,13 @@ const navigation = [
   { label: 'AI 智能助理', path: '/assistant', icon: 'ChatDotRound', badge: 'AI' },
 ]
 
+// 管理菜单只在管理员登录时出现。这只是"不给普通用户看"，不是权限控制：
+// 真正的拦截在后端接口的 get_current_admin 上。
+const adminNavigation = [
+  { label: '用户管理', path: '/admin/users', icon: 'UserFilled' },
+]
+const isAdmin = computed(() => userInfo.value?.role === 'admin')
+
 const currentTitle = computed(() => route.meta.title || '工作台')
 const userName = computed(() => userInfo.value?.name || userInfo.value?.username || '用户')
 const userAvatar = computed(() => userName.value.slice(0, 1))
@@ -91,6 +98,22 @@ onMounted(async () => {
         </button>
       </nav>
 
+      <template v-if="isAdmin">
+        <div class="nav-caption is-group">系统管理</div>
+        <nav class="side-nav">
+          <button
+            v-for="item in adminNavigation"
+            :key="item.path"
+            class="nav-item"
+            :class="{ active: route.path === item.path }"
+            @click="navigate(item.path)"
+          >
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span>{{ item.label }}</span>
+          </button>
+        </nav>
+      </template>
+
       <div class="sidebar-spacer"></div>
       <div class="ai-guide-card">
         <span class="sparkle"><el-icon><MagicStick /></el-icon></span>
@@ -160,6 +183,7 @@ onMounted(async () => {
 .brand-mark span:nth-child(1) { height: 11px; }.brand-mark span:nth-child(2) { height: 20px; }.brand-mark span:nth-child(3) { height: 15px; }
 .brand strong { display: block; font-family: Georgia, serif; font-size: 22px; letter-spacing: .3px; }.brand small { display: block; margin-top: 1px; color: #88a4a4; font-size: 10px; letter-spacing: .8px; }
 .nav-caption { margin: 0 14px 10px; color: #607e7f; font-size: 10px; font-weight: 700; letter-spacing: 1.8px; }
+.nav-caption.is-group { margin-top: 26px; }
 .side-nav { display: flex; flex-direction: column; gap: 5px; }
 .nav-item { position: relative; width: 100%; height: 48px; display: flex; align-items: center; gap: 13px; padding: 0 14px; color: #9bb0b1; background: transparent; border: 0; border-radius: 11px; transition: .2s ease; }
 .nav-item .el-icon { font-size: 19px; }.nav-item span { font-size: 14px; font-weight: 600; }.nav-item em { margin-left: auto; padding: 1px 7px; color: #123334; font-size: 9px; font-style: normal; font-weight: 800; background: var(--mint); border-radius: 10px; }
