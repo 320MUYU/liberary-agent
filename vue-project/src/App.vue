@@ -24,6 +24,7 @@ const navigation = [
 const adminNavigation = [
   { label: '用户管理', path: '/admin/users', icon: 'UserFilled' },
   { label: '实验室管理', path: '/admin/labs', icon: 'School' },
+  { label: '设备管理', path: '/admin/equipments', icon: 'Cpu' },
 ]
 const isAdmin = computed(() => userInfo.value?.role === 'admin')
 

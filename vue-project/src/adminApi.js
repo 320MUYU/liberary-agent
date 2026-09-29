@@ -70,3 +70,35 @@ export function deleteLabApi(labId) {
     method: 'delete',
   })
 }
+
+// 设备管理：lab_id 不传就是全平台设备，管理页面会按实验室联动筛选
+export function getAdminEquipmentListApi(params) {
+  return request({
+    url: '/api/admin/equipment/list',
+    method: 'get',
+    params,
+  })
+}
+
+export function createEquipmentApi(data) {
+  return request({
+    url: '/api/admin/equipment',
+    method: 'post',
+    data,
+  })
+}
+
+export function updateEquipmentApi(equipmentId, data) {
+  return request({
+    url: `/api/admin/equipment/${equipmentId}`,
+    method: 'put',
+    data,
+  })
+}
+
+export function deleteEquipmentApi(equipmentId) {
+  return request({
+    url: `/api/admin/equipment/${equipmentId}`,
+    method: 'delete',
+  })
+}

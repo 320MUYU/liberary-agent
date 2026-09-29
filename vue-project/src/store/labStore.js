@@ -68,14 +68,14 @@ export function labUnitCount(lab) {
 export function labHealthyRate(lab) {
   const list = lab.equipments || []
   if (!list.length) return 0
-  return Math.round((list.filter((item) => item.status === 'normal').length / list.length) * 100)
+  return Math.round((list.filter(isEquipmentHealthy).length / list.length) * 100)
 }
 
 // 全部实验室的整体设备完好率，给页面顶部的统计用
 export function overallHealthyRate(list = labs) {
   const all = list.flatMap((lab) => lab.equipments || [])
   if (!all.length) return 0
-  return Math.round((all.filter((item) => item.status === 'normal').length / all.length) * 100)
+  return Math.round((all.filter(isEquipmentHealthy).length / all.length) * 100)
 }
 
 const defaultBookings = [
@@ -117,4 +117,17 @@ export const statusMap = {
 
 export const labStatusMap = {
   available: { label: '可预约', type: 'success' }, busy: { label: '使用中', type: 'warning' }, maintenance: { label: '维护中', type: 'info' },
+}
+
+// 设备状态：取值与后端 EquipmentCreateRequest 的 Literal 一一对应
+export const equipmentStatusMap = {
+  normal: { label: '正常', type: 'success' },
+  repair: { label: '维修中', type: 'warning' },
+  scrapped: { label: '已报废', type: 'danger' },
+}
+
+// "算不算完好"只在这里定义一次，下面两个完好率函数都走它，
+// 免得以后加状态时改漏一处
+export function isEquipmentHealthy(equipment) {
+  return equipment.status === 'normal'
 }
