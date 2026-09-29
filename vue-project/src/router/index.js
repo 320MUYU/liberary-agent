@@ -20,6 +20,7 @@ const router = createRouter({
     { path: '/labs', component: () => import('@/views/LabsView.vue'), meta: { title: '实验室资源', requiresAuth: true } },
     { path: '/reservations', component: () => import('@/views/ReservationsView.vue'), meta: { title: '我的预约', requiresAuth: true } },
     { path: '/assistant', component: () => import('@/views/AssistantView.vue'), meta: { title: 'AI 智能助理', requiresAuth: true } },
+    { path: '/profile', component: () => import('@/views/ProfileView.vue'), meta: { title: '个人信息', requiresAuth: true } },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior: () => ({ top: 0 }),

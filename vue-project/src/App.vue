@@ -24,17 +24,31 @@ const userAvatar = computed(() => userName.value.slice(0, 1))
 const userRole = computed(() => ({ student: '学生', admin: '管理员' })[userInfo.value?.role] || '平台用户')
 const userCaption = computed(() => `${userInfo.value?.username || '账号'} · ${userRole.value}`)
 
+// 后端头像存的是相对路径 /uploads/xxx，展示时需拼上后端地址
+function resolveUrl(path) {
+  if (!path) return ''
+  if (/^https?:\/\//.test(path)) return path
+  return `${import.meta.env.VITE_API_BASE_URL}${path}`
+}
+
+const userAvatarUrl = computed(() => resolveUrl(userInfo.value?.avatar))
+
 function navigate(path) {
   router.push(path)
   mobileMenuOpen.value = false
 }
 
 function handleProfileCommand(command) {
-  if (command !== 'logout') return
+  if (command === 'profile') {
+    router.push('/profile')
+    return
+  }
 
-  logout()
-  router.replace('/login')
-  ElMessage.success('已退出登录')
+  if (command === 'logout') {
+    logout()
+    router.replace('/login')
+    ElMessage.success('已退出登录')
+  }
 }
 
 onMounted(async () => {
@@ -114,12 +128,13 @@ onMounted(async () => {
           <span class="top-divider"></span>
           <el-dropdown trigger="click" @command="handleProfileCommand">
             <button class="profile" type="button">
-              <span class="avatar">{{ userAvatar }}</span>
+              <span class="avatar"><img v-if="userAvatarUrl" :src="userAvatarUrl" alt="" /><template v-else>{{ userAvatar }}</template></span>
               <div><strong>{{ userName }}</strong><small>{{ userCaption }}</small></div>
               <el-icon><ArrowDown /></el-icon>
             </button>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="profile"><el-icon><User /></el-icon>个人信息</el-dropdown-item>
                 <el-dropdown-item command="logout"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -156,7 +171,7 @@ onMounted(async () => {
 .page-shell { width: calc(100% - 256px); min-height: 100vh; margin-left: 256px; }
 .topbar { height: 86px; display: flex; align-items: center; justify-content: space-between; padding: 0 38px; position: sticky; top: 0; z-index: 20; background: rgba(248, 247, 243, .91); border-bottom: 1px solid #e8e6de; backdrop-filter: blur(15px); }
 .topbar-left { display: flex; align-items: center; gap: 14px; }.crumb { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; color: #91a09e; font-size: 10px; }.crumb span { color: #517271; }.crumb .el-icon { font-size: 9px; }.topbar h1 { color: var(--ink); font-family: Georgia, 'Noto Serif SC', serif; font-size: 23px; font-weight: 600; }
-.topbar-actions { display: flex; align-items: center; gap: 17px; }.icon-button { width: 38px; height: 38px; display: grid; place-items: center; position: relative; color: #496361; font-size: 18px; background: #fff; border: 1px solid #e1e4dd; border-radius: 11px; }.has-dot::after { content: ''; position: absolute; top: 7px; right: 8px; width: 6px; height: 6px; background: var(--coral); border: 2px solid white; border-radius: 50%; }.top-divider { width: 1px; height: 30px; background: #dedfd9; }.profile { display: flex; align-items: center; gap: 10px; padding: 0; text-align: left; background: transparent; border: 0; }.avatar { width: 38px; height: 38px; display: grid; place-items: center; color: white; font-size: 13px; font-weight: 700; background: #2d6461; border-radius: 11px; }.profile strong, .profile small { display: block; }.profile strong { color: #203c3b; font-size: 12px; }.profile small { margin-top: 2px; color: #8b9997; font-size: 9px; }.profile > .el-icon { margin-left: 5px; color: #8b9997; font-size: 12px; }
+.topbar-actions { display: flex; align-items: center; gap: 17px; }.icon-button { width: 38px; height: 38px; display: grid; place-items: center; position: relative; color: #496361; font-size: 18px; background: #fff; border: 1px solid #e1e4dd; border-radius: 11px; }.has-dot::after { content: ''; position: absolute; top: 7px; right: 8px; width: 6px; height: 6px; background: var(--coral); border: 2px solid white; border-radius: 50%; }.top-divider { width: 1px; height: 30px; background: #dedfd9; }.profile { display: flex; align-items: center; gap: 10px; padding: 0; text-align: left; background: transparent; border: 0; }.avatar { width: 38px; height: 38px; display: grid; place-items: center; overflow: hidden; color: white; font-size: 13px; font-weight: 700; background: #2d6461; border-radius: 11px; }.avatar img { width: 100%; height: 100%; object-fit: cover; }.profile strong, .profile small { display: block; }.profile strong { color: #203c3b; font-size: 12px; }.profile small { margin-top: 2px; color: #8b9997; font-size: 9px; }.profile > .el-icon { margin-left: 5px; color: #8b9997; font-size: 12px; }
 .menu-button { display: none; width: 38px; height: 38px; background: white; border: 1px solid #e1e4dd; border-radius: 10px; }
 .main-content { min-height: calc(100vh - 86px); padding: 30px 38px 42px; }
 .mobile-mask { display: none; }
