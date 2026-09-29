@@ -7,8 +7,11 @@ const props = defineProps({ modelValue: Boolean, selectedLab: { type: Object, de
 const emit = defineEmits(['update:modelValue', 'success'])
 const formRef = ref()
 const submitting = ref(false)
-const today = new Date().toISOString().slice(0, 10)
-const form = reactive({ labId: '', date: today, start: '14:00', end: '16:00', people: 1, purpose: '', note: '' })
+function localToday() {
+  const date = new Date()
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+const form = reactive({ labId: '', date: localToday(), start: '14:00', end: '16:00', people: 1, purpose: '', note: '' })
 
 const selected = computed(() => labs.find((item) => item.id === Number(form.labId)))
 const rules = {
@@ -21,21 +24,24 @@ watch(() => props.modelValue, (open) => {
   if (open && props.selectedLab) form.labId = props.selectedLab.id
 })
 
-function disabledDate(date) { return date.getTime() < new Date(`${today}T00:00:00`).getTime() }
+function disabledDate(date) { return date.getTime() < new Date(`${localToday()}T00:00:00`).getTime() }
 
 async function submit() {
   await formRef.value.validate()
   if (form.start >= form.end) return ElMessage.warning('结束时间需要晚于开始时间')
   submitting.value = true
-  window.setTimeout(() => {
-    const booking = addBooking({ ...form, labId: Number(form.labId) })
-    submitting.value = false
+  try {
+    const booking = await addBooking({ ...form, labId: Number(form.labId) })
     emit('update:modelValue', false)
     emit('success', booking)
     ElMessage.success('预约申请已提交，请等待管理员审核')
     form.purpose = ''
     form.note = ''
-  }, 500)
+  } catch {
+    // 接口层已显示失败原因，保留表单内容方便修改后重试。
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 
@@ -51,7 +57,7 @@ async function submit() {
           <el-option v-for="lab in labs.filter((item) => item.status !== 'maintenance')" :key="lab.id" :label="`${lab.name} · ${lab.code}`" :value="lab.id" />
         </el-select>
       </el-form-item>
-      <div v-if="selected" class="lab-summary"><el-icon><Location /></el-icon>{{ selected.building }} {{ selected.floor }}<span></span><el-icon><User /></el-icon>容纳 {{ selected.capacity }} 人<span></span><el-icon><Clock /></el-icon>{{ selected.nextFree }} 可用</div>
+      <div v-if="selected" class="lab-summary"><el-icon><Location /></el-icon>{{ selected.building }} · {{ selected.code }}<span></span><el-icon><User /></el-icon>容纳 {{ selected.capacity }} 人</div>
       <div class="form-grid three">
         <el-form-item label="预约日期" prop="date"><el-date-picker v-model="form.date" type="date" value-format="YYYY-MM-DD" :disabled-date="disabledDate" style="width: 100%" /></el-form-item>
         <el-form-item label="开始时间"><el-time-select v-model="form.start" start="08:00" step="00:30" end="21:00" style="width: 100%" /></el-form-item>

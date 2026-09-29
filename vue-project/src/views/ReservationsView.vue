@@ -1,23 +1,34 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import BookingDialog from '@/components/BookingDialog.vue'
-import { bookings, cancelBooking, statusMap } from '@/store/labStore'
+import { bookings, cancelBooking, loadBookings, statusMap } from '@/store/labStore'
 
 const activeStatus = ref('all')
 const search = ref('')
 const bookingOpen = ref(false)
-const statusTabs = [{ value: 'all', label: '全部' }, { value: 'approved', label: '已通过' }, { value: 'pending', label: '审核中' }, { value: 'completed', label: '已完成' }, { value: 'cancelled', label: '已取消' }]
+const detail = ref(null)
+const detailOpen = computed({ get: () => Boolean(detail.value), set: (open) => { if (!open) detail.value = null } })
+const loading = ref(false)
+const statusTabs = [{ value: 'all', label: '全部' }, { value: 'approved', label: '已通过' }, { value: 'pending', label: '审核中' }, { value: 'rejected', label: '未通过' }, { value: 'cancelled', label: '已取消' }]
 const filtered = computed(() => bookings.filter((item) => (activeStatus.value === 'all' || item.status === activeStatus.value) && (!search.value || `${item.lab}${item.purpose}${item.room}`.toLowerCase().includes(search.value.toLowerCase()))))
 const count = (status) => status === 'all' ? bookings.length : bookings.filter((item) => item.status === status).length
 
 async function cancel(item) {
   try {
     await ElMessageBox.confirm(`确定取消 ${item.date} 的「${item.lab}」预约吗？`, '取消预约', { type: 'warning', confirmButtonText: '确认取消', cancelButtonText: '保留预约' })
-    cancelBooking(item.id)
+  } catch { return }
+  try {
+    await cancelBooking(item.id)
     ElMessage.success('预约已取消')
-  } catch { /* user cancelled */ }
+  } catch { /* 接口层已提示失败原因 */ }
 }
+
+onMounted(async () => {
+  loading.value = true
+  try { await loadBookings(true) } catch { /* 接口层已提示失败原因 */ }
+  finally { loading.value = false }
+})
 </script>
 
 <template>
@@ -29,7 +40,7 @@ async function cancel(item) {
       <article class="new-card" @click="bookingOpen = true"><span><el-icon><Plus /></el-icon></span><div><strong>新建预约</strong><p>选择实验室与时段</p></div><el-icon><Right /></el-icon></article>
     </div>
 
-    <section class="records surface">
+    <section v-loading="loading" class="records surface">
       <div class="records-head">
         <div><h2>预约记录</h2><p>管理和查看你的实验室申请</p></div>
         <el-input v-model="search" clearable placeholder="搜索实验室或用途" class="record-search"><template #prefix><el-icon><Search /></el-icon></template></el-input>
@@ -42,12 +53,25 @@ async function cancel(item) {
           <div class="date-card"><strong>{{ item.date.slice(-2) }}</strong><span>{{ Number(item.date.slice(5,7)) }}月</span></div>
           <div class="record-main"><div class="record-title"><h3>{{ item.lab }}</h3><span :class="['status', statusMap[item.status].class]">{{ statusMap[item.status].label }}</span></div><p class="purpose">{{ item.purpose }}</p><div class="record-meta"><span><el-icon><Location /></el-icon>{{ item.room }}</span><span><el-icon><Clock /></el-icon>{{ item.date }} · {{ item.start }} — {{ item.end }}</span><span><el-icon><User /></el-icon>{{ item.people }} 人</span></div></div>
           <div class="record-id"><small>预约编号</small><span>#{{ String(item.id).slice(-6) }}</span></div>
-          <div class="record-actions"><el-button size="small">查看详情</el-button><el-button v-if="['approved','pending'].includes(item.status)" size="small" text type="danger" @click="cancel(item)">取消预约</el-button></div>
+          <div class="record-actions"><el-button size="small" @click="detail = item">查看详情</el-button><el-button v-if="['approved','pending'].includes(item.status)" size="small" text type="danger" @click="cancel(item)">取消预约</el-button></div>
         </article>
       </div>
-      <div v-else class="records-empty"><span><el-icon><Calendar /></el-icon></span><h3>这里还没有预约记录</h3><p>调整筛选条件，或创建一条新的实验室预约</p><el-button type="primary" @click="bookingOpen = true">新建预约</el-button></div>
+      <div v-else-if="!loading" class="records-empty"><span><el-icon><Calendar /></el-icon></span><h3>这里还没有预约记录</h3><p>调整筛选条件，或创建一条新的实验室预约</p><el-button type="primary" @click="bookingOpen = true">新建预约</el-button></div>
     </section>
     <BookingDialog v-model="bookingOpen" />
+    <el-dialog v-model="detailOpen" title="预约详情" width="min(520px, 92vw)">
+      <template v-if="detail">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="实验室">{{ detail.lab }} · {{ detail.room }}</el-descriptions-item>
+          <el-descriptions-item label="预约时间">{{ detail.date }} {{ detail.start }} — {{ detail.end }}</el-descriptions-item>
+          <el-descriptions-item label="实验人数">{{ detail.people }} 人</el-descriptions-item>
+          <el-descriptions-item label="实验用途">{{ detail.purpose }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.note" label="补充说明">{{ detail.note }}</el-descriptions-item>
+          <el-descriptions-item label="审核状态">{{ statusMap[detail.status]?.label || detail.status }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.reviewNote" label="审核意见">{{ detail.reviewNote }}</el-descriptions-item>
+        </el-descriptions>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

@@ -1,5 +1,7 @@
 import { reactive } from 'vue'
 import { getLabListApi } from '../labApi.js'
+import { cancelReservationApi, createReservationApi, getMyReservationsApi } from '../reservationApi.js'
+import { getUserInfo } from '../auth.js'
 
 // 实验室数据现在来自后端（这里原来是写死的 6 条假数据）。
 // 仍然导出成 reactive 数组，是因为 LabsView / DashboardView / BookingDialog
@@ -78,40 +80,68 @@ export function overallHealthyRate(list = labs) {
   return Math.round((all.filter(isEquipmentHealthy).length / all.length) * 100)
 }
 
-const defaultBookings = [
-  { id: 1001, labId: 1, lab: '智能感知实验室', room: 'A-301', date: '2026-09-22', start: '14:00', end: '16:00', purpose: '计算机视觉课程实验', people: 4, status: 'approved', createdAt: '2026-09-19' },
-  { id: 1002, labId: 3, lab: '嵌入式系统实验室', room: 'C-205', date: '2026-09-24', start: '09:00', end: '11:00', purpose: '物联网课程小组实验', people: 6, status: 'pending', createdAt: '2026-09-21' },
-  { id: 1003, labId: 4, lab: '数字媒体实验室', room: 'D-602', date: '2026-09-17', start: '13:00', end: '15:00', purpose: 'VR 交互项目测试', people: 3, status: 'completed', createdAt: '2026-09-15' },
-]
+export const bookings = reactive([])
+export const notifications = reactive([])
+let bookingsPending = null
+let loadedUserId = null
+let pendingUserId = null
 
-function loadBookings() {
-  try { return JSON.parse(localStorage.getItem('labmind-bookings')) || defaultBookings } catch { return defaultBookings }
+function displayBooking(record) {
+  return {
+    id: record.id,
+    labId: record.lab_id,
+    lab: record.lab_name,
+    room: record.lab_code,
+    date: record.date,
+    start: record.start?.slice(0, 5),
+    end: record.end?.slice(0, 5),
+    purpose: record.purpose,
+    people: record.people,
+    note: record.note,
+    status: record.status,
+    reviewNote: record.review_note,
+    createdAt: record.created_at,
+  }
 }
 
-export const bookings = reactive(loadBookings())
-export const notifications = reactive([
-  { id: 1, title: '预约审核通过', content: '智能感知实验室的预约已通过审核。', time: '10 分钟前', type: 'success' },
-  { id: 2, title: '实验即将开始', content: '请在 13:50 前往 A-301 签到。', time: '1 小时前', type: 'warning' },
-])
+export function loadBookings(force = false) {
+  const userId = getUserInfo()?.id
+  if (loadedUserId !== userId) {
+    bookings.splice(0)
+    loadedUserId = userId
+  }
+  if (bookingsPending && pendingUserId === userId) return bookingsPending
+  if (bookings.length && !force) return Promise.resolve(bookings)
+  pendingUserId = userId
+  const request = getMyReservationsApi()
+    .then((records) => {
+      if (loadedUserId === userId) bookings.splice(0, bookings.length, ...records.map(displayBooking))
+      return bookings
+    })
+    .finally(() => { if (bookingsPending === request) bookingsPending = null })
+  bookingsPending = request
+  return bookingsPending
+}
 
-function persist() { localStorage.setItem('labmind-bookings', JSON.stringify(bookings)) }
-
-export function addBooking(data) {
-  const lab = labs.find((item) => item.id === Number(data.labId))
-  const booking = { id: Date.now(), labId: lab.id, lab: lab.name, room: lab.code, status: 'pending', createdAt: new Date().toISOString().slice(0, 10), ...data }
+export async function addBooking(data) {
+  const record = await createReservationApi({
+    lab_id: Number(data.labId), date: data.date, start: data.start, end: data.end,
+    people: data.people, purpose: data.purpose, note: data.note,
+  })
+  const booking = displayBooking(record)
   bookings.unshift(booking)
-  persist()
   return booking
 }
 
-export function cancelBooking(id) {
-  const booking = bookings.find((item) => item.id === id)
-  if (booking) booking.status = 'cancelled'
-  persist()
+export async function cancelBooking(id) {
+  const record = await cancelReservationApi(id)
+  const index = bookings.findIndex((item) => item.id === id)
+  if (index !== -1) bookings.splice(index, 1, displayBooking(record))
 }
 
 export const statusMap = {
   approved: { label: '已通过', class: '' }, pending: { label: '审核中', class: 'pending' },
+  rejected: { label: '未通过', class: 'cancelled' },
   completed: { label: '已完成', class: 'completed' }, cancelled: { label: '已取消', class: 'cancelled' },
 }
 

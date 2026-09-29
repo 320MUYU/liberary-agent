@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import BookingDialog from '@/components/BookingDialog.vue'
 import { useAuthStore } from '@/store/authStore'
-import { bookings, labIcon, labStyle, labs, loadLabs, statusMap } from '@/store/labStore'
+import { bookings, labIcon, labStyle, labs, loadBookings, loadLabs, statusMap } from '@/store/labStore'
 
 const router = useRouter()
 const { userInfo } = useAuthStore()
@@ -11,13 +11,26 @@ const bookingOpen = ref(false)
 // 实验室是进页面后异步取回来的，首屏这一刻 labs 还是空的，
 // 所以默认选中项先给 null，等接口回来再补上
 const selectedLab = ref(null)
-const upcoming = computed(() => bookings.filter((item) => ['approved', 'pending'].includes(item.status)).slice(0, 3))
+const today = new Date()
+const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+const upcoming = computed(() => bookings.filter((item) => ['approved', 'pending'].includes(item.status) && item.date >= todayKey).sort((a, b) => `${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`)).slice(0, 3))
 const approvedCount = computed(() => bookings.filter((item) => item.status === 'approved').length)
+const monthlyCount = computed(() => bookings.filter((item) => item.date?.startsWith(todayKey.slice(0, 7))).length)
+const approvedHours = computed(() => bookings.filter((item) => item.status === 'approved').reduce((hours, item) => {
+  const [startHour, startMinute] = item.start.split(':').map(Number)
+  const [endHour, endMinute] = item.end.split(':').map(Number)
+  return hours + (endHour * 60 + endMinute - startHour * 60 - startMinute) / 60
+}, 0))
+const nextApproved = computed(() => upcoming.value.find((item) => item.status === 'approved'))
+const welcomeMessage = computed(() => nextApproved.value
+  ? `今天是 ${today.getMonth() + 1} 月 ${today.getDate()} 日，下一场已通过的实验安排在 ${nextApproved.value.date} ${nextApproved.value.start}。`
+  : `今天是 ${today.getMonth() + 1} 月 ${today.getDate()} 日，可在“我的预约”查看申请与审核结果。`)
 const userName = computed(() => userInfo.value?.name || userInfo.value?.username || '同学')
 
 function openBooking(lab) { selectedLab.value = lab || labs[0] || null; bookingOpen.value = true }
 
 onMounted(async () => {
+  loadBookings(true).catch(() => {})
   try {
     await loadLabs()
     if (!selectedLab.value) selectedLab.value = labs[0] || null
@@ -34,7 +47,7 @@ function displayDate(date) { const [, month, day] = date.split('-'); return `${N
       <div class="welcome-copy">
         <span class="eyebrow"><i></i> 2026 秋季学期</span>
         <h2>上午好，{{ userName }}</h2>
-        <p>今天是 9 月 22 日，祝你实验顺利。下一场实验将在下午 14:00 开始。</p>
+        <p>{{ welcomeMessage }}</p>
         <div class="welcome-actions">
           <el-button type="primary" size="large" @click="openBooking()"><el-icon><Plus /></el-icon>预约实验室</el-button>
           <button @click="router.push('/assistant')"><el-icon><MagicStick /></el-icon>让 AI 帮我选择</button>
@@ -49,9 +62,9 @@ function displayDate(date) { const [, month, day] = date.split('-'); return `${N
 
     <section class="stats-grid">
       <article class="stat-card surface"><span class="stat-icon green"><el-icon><School /></el-icon></span><div><small>开放实验室</small><strong>{{ labs.filter(l => l.status !== 'maintenance').length }}<em>/ {{ labs.length }} 间</em></strong></div><span class="trend">实时</span></article>
-      <article class="stat-card surface"><span class="stat-icon orange"><el-icon><Calendar /></el-icon></span><div><small>本月预约</small><strong>{{ bookings.length }}<em>次</em></strong></div><span class="trend up">+2</span></article>
+      <article class="stat-card surface"><span class="stat-icon orange"><el-icon><Calendar /></el-icon></span><div><small>本月预约</small><strong>{{ monthlyCount }}<em>次</em></strong></div></article>
       <article class="stat-card surface"><span class="stat-icon blue"><el-icon><CircleCheck /></el-icon></span><div><small>已通过</small><strong>{{ approvedCount }}<em>项</em></strong></div><span class="trend">良好</span></article>
-      <article class="stat-card surface"><span class="stat-icon purple"><el-icon><Timer /></el-icon></span><div><small>实验时长</small><strong>18<em>小时</em></strong></div><span class="trend up">本学期</span></article>
+      <article class="stat-card surface"><span class="stat-icon purple"><el-icon><Timer /></el-icon></span><div><small>已通过时长</small><strong>{{ approvedHours }}<em>小时</em></strong></div></article>
     </section>
 
     <div class="content-grid">
