@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, Query
 from datetime import datetime
 
 from sqlalchemy import or_
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.common.exceptions import BusinessException
@@ -38,7 +37,7 @@ from app.schemas.user import (
     UserRoleUpdateRequest,
     UserStatusUpdateRequest,
 )
-from app.services import user_service
+from app.services import lab_service, user_service
 
 router = APIRouter(prefix="/admin", tags=["管理员接口"])
 
@@ -130,28 +129,6 @@ def reset_user_password(
 # ============ 实验室管理 ============
 
 
-def _get_lab_or_404(lab_id: int, db: Session) -> Lab:
-    lab = db.query(Lab).filter(Lab.id == lab_id).first()
-    if not lab:
-        raise BusinessException(code=404, message="实验室不存在")
-    return lab
-
-
-def _ensure_code_available(
-    code: str, db: Session, exclude_lab_id: int | None = None
-) -> None:
-    """房间号查重
-
-    exclude_lab_id 用在修改的场景：一间实验室改其它字段时，
-    它自己的房间号当然算"被占用"，所以要把它自己排除掉。
-    """
-    query = db.query(Lab).filter(Lab.code == code)
-    if exclude_lab_id is not None:
-        query = query.filter(Lab.id != exclude_lab_id)
-    if query.first():
-        raise BusinessException(code=409, message=f"房间号 {code} 已被其它实验室占用")
-
-
 @router.get("/lab/list")
 def admin_list_labs(
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
@@ -163,30 +140,8 @@ def admin_list_labs(
     db: Session = Depends(get_db),
 ):
     """分页查询实验室（管理端）"""
-    query = db.query(Lab)
-
-    if keyword and keyword.strip():
-        pattern = f"%{keyword.strip()}%"
-        query = query.filter(
-            or_(
-                Lab.name.like(pattern),
-                Lab.code.like(pattern),
-                Lab.building.like(pattern),
-            )
-        )
-
-    if category:
-        query = query.filter(Lab.category == category)
-
-    if status:
-        query = query.filter(Lab.status == status)
-
-    total = query.count()
-    items = (
-        query.order_by(Lab.code)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+    total, items = lab_service.list_labs_page(
+        db, page, page_size, keyword, category, status
     )
 
     return Response.success(
@@ -205,22 +160,11 @@ def create_lab(
     _: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """新增实验室"""
-    _ensure_code_available(data.code, db)
+    """新增实验室
 
-    lab = Lab(**data.model_dump())
-    try:
-        db.add(lab)
-        db.commit()
-        db.refresh(lab)
-    except IntegrityError as exc:
-        # 兜底：上面查重和这里插入之间有时间差，并发时两个请求可能都查到
-        # "不存在"，最终由数据库的唯一索引拦下第二个。
-        # 这里必须 rollback，否则 session 会卡在"事务失败"状态，后续操作全报错。
-        db.rollback()
-        raise BusinessException(
-            code=409, message=f"房间号 {data.code} 已被其它实验室占用"
-        ) from exc
+    房间号查重、以及并发插入时靠唯一索引兜底的处理，见 lab_service.create_lab。
+    """
+    lab = lab_service.create_lab(db, data)
 
     return Response.success(
         message="实验室已创建", data=LabResponse.model_validate(lab)
@@ -234,21 +178,12 @@ def update_lab(
     _: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """修改实验室（全量更新）"""
-    lab = _get_lab_or_404(lab_id, db)
-    _ensure_code_available(data.code, db, exclude_lab_id=lab_id)
+    """修改实验室（全量更新）
 
-    for field, value in data.model_dump().items():
-        setattr(lab, field, value)
-
-    try:
-        db.commit()
-        db.refresh(lab)
-    except IntegrityError as exc:
-        db.rollback()
-        raise BusinessException(
-            code=409, message=f"房间号 {data.code} 已被其它实验室占用"
-        ) from exc
+    查重时要把实验室自己排除掉（否则改其它字段会被自己的房间号挡住），
+    这个处理在 lab_service.update_lab 里。
+    """
+    lab = lab_service.update_lab(db, lab_id, data)
 
     return Response.success(
         message="实验室已更新", data=LabResponse.model_validate(lab)
@@ -262,14 +197,7 @@ def delete_lab(
     db: Session = Depends(get_db),
 ):
     """没有预约记录时删除实验室及其设备。"""
-    lab = _get_lab_or_404(lab_id, db)
-    if db.query(Reservation.id).filter(Reservation.lab_id == lab_id).first():
-        raise BusinessException(code=409, message="实验室已有预约记录，不能删除")
-
-    # 这里数的是设备记录的条数（"种"），不是把 total 加起来得到的台数
-    equipment_count = len(lab.equipments)
-    db.delete(lab)
-    db.commit()
+    equipment_count = lab_service.delete_lab(db, lab_id)
 
     message = "实验室已删除"
     if equipment_count:
@@ -343,10 +271,12 @@ def create_equipment(
     _: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """新增设备"""
-    # 先确认实验室存在：外键约束也会拦下不存在的 lab_id，
-    # 但那抛出来的是 IntegrityError（500），这里能给出一句人话（404）
-    _get_lab_or_404(data.lab_id, db)
+    """新增设备
+
+    先确认实验室存在（否则外键约束抛出的是 500，而这里能给人话 404），
+    理由见 lab_service.get_lab_or_404。
+    """
+    lab_service.get_lab_or_404(db, data.lab_id)
 
     equipment = Equipment(**data.model_dump())
     db.add(equipment)
@@ -370,7 +300,7 @@ def update_equipment(
     lab_id 也是全量更新的一部分，所以设备可以被改挂到另一间实验室。
     """
     equipment = _get_equipment_or_404(equipment_id, db)
-    _get_lab_or_404(data.lab_id, db)
+    lab_service.get_lab_or_404(db, data.lab_id)
 
     for field, value in data.model_dump().items():
         setattr(equipment, field, value)
