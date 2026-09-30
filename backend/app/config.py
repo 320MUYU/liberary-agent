@@ -1,7 +1,11 @@
 from pydantic_settings import BaseSettings,SettingsConfigDict
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent
+# APP_DIR 指向 backend/app（代码所在），BASE_DIR 指向 backend/（项目根）。
+# 配置与运行时产物（.env、uploads/）都放在 backend/ 根，不跟着代码走，
+# 这样它们既不会混进 app 包里，也和 .gitignore 的忽略规则对得上。
+APP_DIR = Path(__file__).resolve().parent
+BASE_DIR = APP_DIR.parent
 
 class Settings(BaseSettings):
     DATABASE_URL: str
