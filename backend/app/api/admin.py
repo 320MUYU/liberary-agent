@@ -1,17 +1,10 @@
 from fastapi import APIRouter, Depends, Query
-from datetime import datetime
-
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.common.exceptions import BusinessException
 from app.common.response import Response
 from app.database import get_db
 from app.dependencies.auth import get_current_admin
-from app.models.labs import Lab
-from app.models.reservations import Reservation
 from app.models.users import User
-from app.api.reservation import approved_conflict
 from app.schemas.equipment import (
     EquipmentCreateRequest,
     EquipmentPageResponse,
@@ -36,7 +29,12 @@ from app.schemas.user import (
     UserRoleUpdateRequest,
     UserStatusUpdateRequest,
 )
-from app.services import equipment_service, lab_service, user_service
+from app.services import (
+    equipment_service,
+    lab_service,
+    reservation_service,
+    user_service,
+)
 
 router = APIRouter(prefix="/admin", tags=["管理员接口"])
 
@@ -297,23 +295,10 @@ def admin_list_reservations(
     _: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Reservation).join(Reservation.lab).join(Reservation.applicant)
-    if status:
-        if status not in ("pending", "approved", "rejected", "cancelled"):
-            raise BusinessException(message="无效的预约状态")
-        query = query.filter(Reservation.status == status)
-    if keyword and keyword.strip():
-        pattern = f"%{keyword.strip()}%"
-        query = query.filter(
-            or_(Lab.name.like(pattern), Lab.code.like(pattern), User.name.like(pattern))
-        )
-    total = query.count()
-    items = (
-        query.order_by(Reservation.create_time.desc(), Reservation.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+    total, items = reservation_service.list_reservations_page(
+        db, page, page_size, status, keyword
     )
+
     return Response.success(
         data=ReservationPageResponse(
             total=total,
@@ -331,44 +316,9 @@ def review_reservation(
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    existing = db.query(Reservation).filter(Reservation.id == reservation_id).first()
-    if not existing:
-        raise BusinessException(code=404, message="预约不存在")
-
-    # 同一实验室的审核按顺序处理，防止并发通过重叠时段。
-    lab = db.query(Lab).filter(Lab.id == existing.lab_id).with_for_update().first()
-    reservation = (
-        db.query(Reservation)
-        .filter(Reservation.id == reservation_id)
-        .populate_existing()
-        .with_for_update()
-        .first()
+    reservation = reservation_service.review_reservation(
+        db, current_admin, reservation_id, data
     )
-    if reservation.status != "pending":
-        raise BusinessException(code=409, message="该预约已处理，不能重复审核")
-    if data.status == "approved":
-        now = datetime.now()
-        if (reservation.date, reservation.start) <= (now.date(), now.strftime("%H:%M")):
-            raise BusinessException(code=409, message="预约时间已过，不能通过")
-        if lab.status == "maintenance":
-            raise BusinessException(code=409, message="实验室维护中，不能通过预约")
-        if reservation.people > lab.capacity:
-            raise BusinessException(code=409, message="预约人数超过当前实验室容量")
-        if approved_conflict(
-            db,
-            reservation.lab_id,
-            reservation.date,
-            reservation.start,
-            reservation.end,
-            exclude_id=reservation.id,
-        ):
-            raise BusinessException(code=409, message="该时段已有通过的预约")
 
-    reservation.status = data.status
-    reservation.review_note = data.review_note.strip() if data.review_note else None
-    reservation.reviewer_id = current_admin.id
-    reservation.reviewed_at = datetime.now()
-    db.commit()
-    db.refresh(reservation)
     message = "预约已通过" if data.status == "approved" else "预约已驳回"
     return Response.success(message=message, data=reservation_response(reservation))
