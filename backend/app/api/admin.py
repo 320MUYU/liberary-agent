@@ -14,12 +14,6 @@ from app.models.labs import Lab
 from app.models.reservations import Reservation
 from app.models.users import User
 from app.api.reservation import approved_conflict
-from app.schemas.admin import (
-    ResetPasswordRequest,
-    UserPageResponse,
-    UserRoleUpdateRequest,
-    UserStatusUpdateRequest,
-)
 from app.schemas.equipment import (
     EquipmentCreateRequest,
     EquipmentPageResponse,
@@ -32,27 +26,21 @@ from app.schemas.lab import (
     LabResponse,
     LabUpdateRequest,
 )
-from app.schemas.user import UserResponse
 from app.schemas.reservation import (
     ReservationPageResponse,
     ReservationReviewRequest,
     reservation_response,
 )
-from app.utils.bcrypt import hash_password
+from app.schemas.user import (
+    ResetPasswordRequest,
+    UserPageResponse,
+    UserResponse,
+    UserRoleUpdateRequest,
+    UserStatusUpdateRequest,
+)
+from app.services import user_service
 
 router = APIRouter(prefix="/admin", tags=["管理员接口"])
-
-
-def _get_user_or_404(user_id: int, db: Session) -> User:
-    """按 id 取用户，取不到就报错
-
-    每个管理接口都要先确认目标用户存在，否则下面 user.role = ... 会直接
-    抛 AttributeError（None 没有这个属性），变成 500 而不是一句人话。
-    """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise BusinessException(code=404, message="用户不存在")
-    return user
 
 
 @router.get("/user/list")
@@ -71,28 +59,8 @@ def list_users(
     挂在这里纯粹是为了让整个接口走一遍管理员校验——接口的准入条件写在
     函数签名里，比写在函数体内的 if 更难漏掉。
     """
-    query = db.query(User)
-
-    if keyword and keyword.strip():
-        # % 是 SQL LIKE 的通配符，这里不做转义：用户搜到更多结果顶多是"搜宽了"，
-        # 不会造成注入（SQLAlchemy 的 like() 会把内容当参数绑定，不拼 SQL 字符串）
-        pattern = f"%{keyword.strip()}%"
-        query = query.filter(or_(User.username.like(pattern), User.name.like(pattern)))
-
-    if role:
-        query = query.filter(User.role == role)
-
-    # 用 is not None 而不是 if status：status 的合法值是 0 和 1，
-    # 而 0 在 Python 里是假值，写成 if status 会让"筛选已禁用用户"彻底失效
-    if status is not None:
-        query = query.filter(User.status == status)
-
-    total = query.count()
-    items = (
-        query.order_by(User.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+    total, items = user_service.list_users_page(
+        db, page, page_size, keyword, role, status
     )
 
     return Response.success(
@@ -115,20 +83,10 @@ def update_user_role(
 ):
     """修改指定用户的角色
 
-    不允许改自己的角色：管理员一旦把自己降成学生，就没人能再进管理后台了
-    （注册接口只会造学生），只能去数据库里手改。这个坑踩一次就要命的。
-
-    注意这里只挡了"自己"，没有挡"把所有管理员都降级"——如果库里本来有多个
-    管理员，互相降级仍然可能把后台锁死。真要严格，得加"至少保留一个管理员"
-    的校验，这个留到后面有需要再说。
+    不允许改自己角色的理由、以及"多个管理员互相降级"这个已知缺口，
+    都写在 user_service.update_user_role 里。
     """
-    if user_id == current_admin.id:
-        raise BusinessException(message="不能修改自己的角色")
-
-    user = _get_user_or_404(user_id, db)
-    user.role = data.role
-    db.commit()
-    db.refresh(user)
+    user = user_service.update_user_role(db, current_admin, user_id, data.role)
 
     return Response.success(
         message="角色已更新", data=UserResponse.model_validate(user)
@@ -144,18 +102,10 @@ def update_user_status(
 ):
     """启用 / 禁用指定用户
 
-    同样不允许禁用自己。禁用的作用是"账号还在但登录不上"：
-    get_current_user 里会检查 status，所以禁用后对方手里的 token 也会立刻失效。
-
-    另外，禁用不会让对方的 token 从浏览器里消失，只是每次请求都会被 401 挡回来。
+    不允许禁用自己、以及"禁用后对方的 token 会立刻失效"的原理，
+    见 user_service.update_user_status。
     """
-    if user_id == current_admin.id:
-        raise BusinessException(message="不能禁用自己的账号")
-
-    user = _get_user_or_404(user_id, db)
-    user.status = data.status
-    db.commit()
-    db.refresh(user)
+    user = user_service.update_user_status(db, current_admin, user_id, data.status)
 
     action = "已启用" if data.status == 1 else "已禁用"
     return Response.success(message=f"账号{action}", data=UserResponse.model_validate(user))
@@ -170,16 +120,9 @@ def reset_user_password(
 ):
     """重置指定用户的密码
 
-    和"修改密码"接口的区别：改密码要验原密码（证明是本人），
-    重置不验（管理员本来就不该知道别人的密码），所以这个接口的权限
-    必须严格锁死在管理员上。
-
-    存进库的依然是 bcrypt 密文；重置出来的密码要不要告诉用户，
-    由管理员线下传达，接口不回显。
+    为什么重置不需要验原密码（而"改密码"要），见 user_service.reset_user_password。
     """
-    user = _get_user_or_404(user_id, db)
-    user.password = hash_password(data.new_password)
-    db.commit()
+    user_service.reset_user_password(db, user_id, data.new_password)
 
     return Response.success(message="密码已重置")
 
