@@ -161,7 +161,7 @@ async function save() {
       avatar: form.avatar,
     })
     updateUser(user)
-    ElMessage.success('个人信息已更新')
+    ElMessage.success('读者资料已更新')
   } catch {
     // 错误提示已由请求拦截器统一处理
   } finally {
@@ -221,7 +221,7 @@ async function changePassword() {
 
       <div class="form-panel">
         <div class="panel-head">
-          <h2>个人信息</h2>
+          <h2>读者资料</h2>
           <p>更新你的基本资料，账号与角色不可修改</p>
         </div>
 
