@@ -26,21 +26,22 @@ class AIServiceTest(unittest.TestCase):
         return ChatRequest(
             messages=[
                 ChatMessage(role="assistant", content="你好"),
-                ChatMessage(role="user", content="如何预约实验室？"),
+                ChatMessage(role="user", content="如何预约学习空间？"),
             ]
         )
 
     def test_chat_builds_langchain_messages_and_returns_answer(self):
-        model = FakeChatModel(AIMessage(content=" 请在实验室列表中提交预约。 "))
+        model = FakeChatModel(AIMessage(content=" 请在学习空间列表中提交预约。 "))
 
         result = ai_services.chat(self.request(), model=model)
 
         self.assertEqual(result.role, "assistant")
-        self.assertEqual(result.content, "请在实验室列表中提交预约。")
+        self.assertEqual(result.content, "请在学习空间列表中提交预约。")
         self.assertIsInstance(model.received_messages[0], SystemMessage)
         self.assertIsInstance(model.received_messages[1], AIMessage)
         self.assertIsInstance(model.received_messages[2], HumanMessage)
         self.assertIn("不要编造", model.received_messages[0].content)
+        self.assertIn("尚未接入 RAG", model.received_messages[0].content)
 
     def test_request_rejects_blank_content_and_non_user_last_message(self):
         with self.assertRaises(ValidationError):

@@ -26,7 +26,7 @@ class ReservationFlowTest(unittest.TestCase):
         self.other = User(username="other", password="hash", name="其他学生", role="student")
         self.admin = User(username="admin", password="hash", name="管理员", role="admin")
         self.lab = Lab(
-            name="测试实验室",
+            name="测试研讨室",
             code="A-101",
             building="A 楼",
             floor="1",
@@ -49,13 +49,13 @@ class ReservationFlowTest(unittest.TestCase):
             start=start,
             end=end,
             people=people,
-            purpose="课程实验",
+            purpose="课程讨论",
         )
 
     def test_submit_review_conflict_and_cancel(self):
         first = create_reservation(self.request(), self.student, self.db).data
         self.assertEqual(first.status, "pending")
-        self.assertEqual(first.lab_name, "测试实验室")
+        self.assertEqual(first.lab_name, "测试研讨室")
 
         listing = admin_list_reservations(
             page=1, page_size=10, status="pending", keyword="学生", _=self.admin, db=self.db
@@ -130,7 +130,7 @@ class ReservationFlowTest(unittest.TestCase):
             start="00:00",
             end="00:30",
             people=2,
-            purpose="临时实验",
+            purpose="临时讨论",
         )
         with self.assertRaises(BusinessException) as too_late:
             create_reservation(request, self.student, self.db)

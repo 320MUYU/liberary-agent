@@ -33,7 +33,7 @@ def get_lab_or_404(db: Session, lab_id: int) -> Lab:
     """
     lab = db.query(Lab).filter(Lab.id == lab_id).first()
     if not lab:
-        raise BusinessException(code=404, message="实验室不存在")
+        raise BusinessException(code=404, message="学习空间不存在")
     return lab
 
 
@@ -49,7 +49,7 @@ def ensure_code_available(
     if exclude_lab_id is not None:
         query = query.filter(Lab.id != exclude_lab_id)
     if query.first():
-        raise BusinessException(code=409, message=f"房间号 {code} 已被其它实验室占用")
+        raise BusinessException(code=409, message=f"房间号 {code} 已被其它学习空间占用")
 
 
 def list_labs_page(
@@ -104,7 +104,7 @@ def create_lab(db: Session, data: LabCreateRequest) -> Lab:
         # 这里必须 rollback，否则 session 会卡在"事务失败"状态，后续操作全报错。
         db.rollback()
         raise BusinessException(
-            code=409, message=f"房间号 {data.code} 已被其它实验室占用"
+            code=409, message=f"房间号 {data.code} 已被其它学习空间占用"
         ) from exc
 
     return lab
@@ -124,7 +124,7 @@ def update_lab(db: Session, lab_id: int, data: LabUpdateRequest) -> Lab:
     except IntegrityError as exc:
         db.rollback()
         raise BusinessException(
-            code=409, message=f"房间号 {data.code} 已被其它实验室占用"
+            code=409, message=f"房间号 {data.code} 已被其它学习空间占用"
         ) from exc
 
     return lab
@@ -139,7 +139,7 @@ def delete_lab(db: Session, lab_id: int) -> int:
     """
     lab = get_lab_or_404(db, lab_id)
     if db.query(Reservation.id).filter(Reservation.lab_id == lab_id).first():
-        raise BusinessException(code=409, message="实验室已有预约记录，不能删除")
+        raise BusinessException(code=409, message="学习空间已有预约记录，不能删除")
 
     equipment_count = len(lab.equipments)
     db.delete(lab)

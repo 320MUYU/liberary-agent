@@ -130,8 +130,8 @@ def reset_user_password(
 def admin_list_labs(
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
     page_size: int = Query(10, ge=1, le=100, description="每页条数"),
-    keyword: str | None = Query(None, description="按名称、房间号或楼栋模糊搜索"),
-    category: str | None = Query(None, description="按类别筛选"),
+    keyword: str | None = Query(None, description="按名称、房间号或馆区模糊搜索"),
+    category: str | None = Query(None, description="按空间类型筛选"),
     status: str | None = Query(None, description="按状态筛选"),
     _: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
@@ -164,7 +164,7 @@ def create_lab(
     lab = lab_service.create_lab(db, data)
 
     return Response.success(
-        message="实验室已创建", data=LabResponse.model_validate(lab)
+        message="学习空间已创建", data=LabResponse.model_validate(lab)
     )
 
 
@@ -183,7 +183,7 @@ def update_lab(
     lab = lab_service.update_lab(db, lab_id, data)
 
     return Response.success(
-        message="实验室已更新", data=LabResponse.model_validate(lab)
+        message="学习空间已更新", data=LabResponse.model_validate(lab)
     )
 
 
@@ -196,9 +196,9 @@ def delete_lab(
     """没有预约记录时删除实验室及其设备。"""
     equipment_count = lab_service.delete_lab(db, lab_id)
 
-    message = "实验室已删除"
+    message = "学习空间已删除"
     if equipment_count:
-        message = f"实验室及其 {equipment_count} 种设备已删除"
+        message = f"学习空间及其 {equipment_count} 种设施已删除"
 
     return Response.success(message=message)
 
@@ -210,8 +210,8 @@ def delete_lab(
 def admin_list_equipments(
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
     page_size: int = Query(10, ge=1, le=100, description="每页条数"),
-    lab_id: int | None = Query(None, description="只查某间实验室的设备"),
-    keyword: str | None = Query(None, description="按设备名称或型号模糊搜索"),
+    lab_id: int | None = Query(None, description="只查某个学习空间的设施"),
+    keyword: str | None = Query(None, description="按设施名称或型号模糊搜索"),
     status: str | None = Query(None, description="按状态筛选"),
     _: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
@@ -249,7 +249,7 @@ def create_equipment(
     equipment = equipment_service.create_equipment(db, data)
 
     return Response.success(
-        message="设备已新增", data=EquipmentResponse.model_validate(equipment)
+        message="设施已新增", data=EquipmentResponse.model_validate(equipment)
     )
 
 
@@ -267,7 +267,7 @@ def update_equipment(
     equipment = equipment_service.update_equipment(db, equipment_id, data)
 
     return Response.success(
-        message="设备已更新", data=EquipmentResponse.model_validate(equipment)
+        message="设施已更新", data=EquipmentResponse.model_validate(equipment)
     )
 
 
@@ -280,7 +280,7 @@ def delete_equipment(
     """删除设备；预约当前只关联实验室，不单独关联设备。"""
     equipment_service.delete_equipment(db, equipment_id)
 
-    return Response.success(message="设备已删除")
+    return Response.success(message="设施已删除")
 
 
 # ============ 预约审核 ============
@@ -291,7 +291,7 @@ def admin_list_reservations(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     status: str | None = Query(None, description="预约状态"),
-    keyword: str | None = Query(None, description="实验室、房间号或申请人"),
+    keyword: str | None = Query(None, description="学习空间、房间号或申请人"),
     _: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):

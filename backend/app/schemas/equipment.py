@@ -18,14 +18,14 @@ class EquipmentResponse(BaseModel):
 class EquipmentCreateRequest(BaseModel):
     """新增设备"""
 
-    name: str = Field(min_length=1, max_length=50, description="设备名称")
+    name: str = Field(min_length=1, max_length=50, description="设施名称")
     model: str | None = Field(default=None, max_length=50, description="型号")
     total: int = Field(default=1, ge=1, le=9999, description="总数量")
     available: int = Field(default=1, ge=0, le=9999, description="可用数量")
     status: Literal["normal", "repair", "scrapped"] = Field(
         default="normal", description="状态：normal-正常，repair-维修中，scrapped-已报废"
     )
-    lab_id: int = Field(description="所属实验室 id")
+    lab_id: int = Field(description="所属学习空间 id")
 
     @model_validator(mode="after")
     def validate_available(self):

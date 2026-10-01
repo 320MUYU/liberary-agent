@@ -21,7 +21,7 @@ class ReservationCreateRequest(BaseModel):
     def purpose_not_blank(cls, value: str) -> str:
         value = value.strip()
         if not value:
-            raise ValueError("请填写实验用途")
+            raise ValueError("请填写使用用途")
         return value
 
     @model_validator(mode="after")

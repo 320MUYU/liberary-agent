@@ -53,11 +53,11 @@ def create_reservation(
     # 审核也锁同一间实验室，避免提交与审核同时进行时遗漏时段冲突。
     lab = db.query(Lab).filter(Lab.id == data.lab_id).with_for_update().first()
     if not lab:
-        raise BusinessException(code=404, message="实验室不存在")
+        raise BusinessException(code=404, message="学习空间不存在")
     if lab.status == "maintenance":
-        raise BusinessException(message="实验室维护中，暂不可预约")
+        raise BusinessException(message="学习空间维护中，暂不可预约")
     if data.people > lab.capacity:
-        raise BusinessException(message=f"预约人数不能超过实验室容量 {lab.capacity} 人")
+        raise BusinessException(message=f"预约人数不能超过空间容量 {lab.capacity} 人")
     if approved_conflict(db, data.lab_id, data.date, data.start, data.end):
         raise BusinessException(code=409, message="该时段已有通过的预约，请选择其他时间")
 
@@ -184,9 +184,9 @@ def review_reservation(
         if (reservation.date, reservation.start) <= (now.date(), now.strftime("%H:%M")):
             raise BusinessException(code=409, message="预约时间已过，不能通过")
         if lab.status == "maintenance":
-            raise BusinessException(code=409, message="实验室维护中，不能通过预约")
+            raise BusinessException(code=409, message="学习空间维护中，不能通过预约")
         if reservation.people > lab.capacity:
-            raise BusinessException(code=409, message="预约人数超过当前实验室容量")
+            raise BusinessException(code=409, message="预约人数超过当前空间容量")
         if approved_conflict(
             db,
             reservation.lab_id,

@@ -30,12 +30,12 @@ class LabCreateRequest(BaseModel):
     跟真实情况无关的数字。
     """
 
-    name: str = Field(min_length=1, max_length=50, description="实验室名称")
+    name: str = Field(min_length=1, max_length=50, description="学习空间名称")
     code: str = Field(min_length=1, max_length=20, description="房间号，如 A-301")
-    building: str = Field(min_length=1, max_length=50, description="所属楼栋")
+    building: str = Field(min_length=1, max_length=50, description="所在馆区")
     floor: str = Field(min_length=1, max_length=10, description="楼层")
     capacity: int = Field(ge=1, le=1000, description="可容纳人数")
-    category: str = Field(min_length=1, max_length=50, description="类别")
+    category: str = Field(min_length=1, max_length=50, description="空间类型")
     status: Literal["available", "busy", "maintenance"] = Field(
         default="available", description="状态：available-可预约，busy-使用中，maintenance-维护中"
     )

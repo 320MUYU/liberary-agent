@@ -16,7 +16,7 @@ from app.services import lab_service
 def get_equipment_or_404(db: Session, equipment_id: int) -> Equipment:
     equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
     if not equipment:
-        raise BusinessException(code=404, message="设备不存在")
+        raise BusinessException(code=404, message="设施不存在")
     return equipment
 
 
