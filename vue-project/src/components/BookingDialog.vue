@@ -15,9 +15,9 @@ const form = reactive({ labId: '', date: localToday(), start: '14:00', end: '16:
 
 const selected = computed(() => labs.find((item) => item.id === Number(form.labId)))
 const rules = {
-  labId: [{ required: true, message: '请选择实验室', trigger: 'change' }],
+  labId: [{ required: true, message: '请选择学习空间', trigger: 'change' }],
   date: [{ required: true, message: '请选择预约日期', trigger: 'change' }],
-  purpose: [{ required: true, message: '请填写实验用途', trigger: 'blur' }],
+  purpose: [{ required: true, message: '请填写使用用途', trigger: 'blur' }],
 }
 
 watch(() => props.modelValue, (open) => {
@@ -46,14 +46,14 @@ async function submit() {
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" width="min(620px, 92vw)" title="提交实验室预约" @update:model-value="emit('update:modelValue', $event)">
+  <el-dialog :model-value="modelValue" width="min(620px, 92vw)" title="预约学习空间" @update:model-value="emit('update:modelValue', $event)">
     <div class="dialog-intro">
       <span><el-icon><Calendar /></el-icon></span>
-      <div><strong>填写预约信息</strong><p>申请提交后将由实验室管理员审核，请确保信息真实完整。</p></div>
+      <div><strong>填写预约信息</strong><p>申请提交后将由图书馆管理员审核，请确保人数和用途真实完整。</p></div>
     </div>
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="booking-form">
-      <el-form-item label="实验室" prop="labId">
-        <el-select v-model="form.labId" placeholder="选择实验室" style="width: 100%">
+      <el-form-item label="学习空间" prop="labId">
+        <el-select v-model="form.labId" placeholder="选择学习空间" style="width: 100%">
           <el-option v-for="lab in labs.filter((item) => item.status !== 'maintenance')" :key="lab.id" :label="`${lab.name} · ${lab.code}`" :value="lab.id" />
         </el-select>
       </el-form-item>
@@ -64,18 +64,18 @@ async function submit() {
         <el-form-item label="结束时间"><el-time-select v-model="form.end" start="08:30" step="00:30" end="22:00" style="width: 100%" /></el-form-item>
       </div>
       <div class="form-grid">
-        <el-form-item label="实验人数"><el-input-number v-model="form.people" :min="1" :max="selected?.capacity || 50" style="width: 100%" /></el-form-item>
-        <el-form-item label="实验用途" prop="purpose"><el-input v-model="form.purpose" placeholder="例如：课程实验 / 项目测试" /></el-form-item>
+        <el-form-item label="使用人数"><el-input-number v-model="form.people" :min="1" :max="selected?.capacity || 50" style="width: 100%" /></el-form-item>
+        <el-form-item label="使用用途" prop="purpose"><el-input v-model="form.purpose" placeholder="例如：小组讨论 / 论文研读" /></el-form-item>
       </div>
-      <el-form-item label="补充说明（选填）"><el-input v-model="form.note" type="textarea" :rows="3" placeholder="可说明所需设备、软件环境或其他要求" maxlength="200" show-word-limit /></el-form-item>
+      <el-form-item label="补充需求（选填）"><el-input v-model="form.note" type="textarea" :rows="3" placeholder="可说明所需设施、无障碍支持或其他要求" maxlength="200" show-word-limit /></el-form-item>
     </el-form>
     <template #footer><el-button @click="emit('update:modelValue', false)">取消</el-button><el-button type="primary" :loading="submitting" @click="submit">提交预约申请</el-button></template>
   </el-dialog>
 </template>
 
 <style scoped>
-.dialog-intro { display: flex; gap: 12px; margin: -6px 0 23px; padding: 14px 16px; background: #edf6f3; border-radius: 11px; }
-.dialog-intro > span { width: 34px; height: 34px; display: grid; place-items: center; flex: none; color: white; background: var(--mint-dark); border-radius: 9px; }
+.dialog-intro { display: flex; gap: 12px; margin: -6px 0 23px; padding: 14px 16px; background: var(--gold-100); border-radius: 11px; }
+.dialog-intro > span { width: 34px; height: 34px; display: grid; place-items: center; flex: none; color: white; background: var(--navy-900); border-radius: 9px; }
 .dialog-intro strong { color: var(--ink); font-size: 12px; }.dialog-intro p { margin-top: 3px; color: #768885; font-size: 10px; }
 .booking-form :deep(.el-form-item__label) { color: #3d5654; font-size: 11px; font-weight: 700; }
 .lab-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: -10px 0 18px; padding: 8px 10px; color: #6e817f; font-size: 10px; background: #fafaf7; border: 1px solid #ecece6; border-radius: 8px; }
