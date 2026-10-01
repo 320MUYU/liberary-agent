@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getUserInfoApi } from '@/authApi'
+import { BRAND } from '@/config/brand'
 import { loadLabs, notifications } from '@/store/labStore'
 import { useAuthStore } from '@/store/authStore'
 import { resolveAssetUrl } from '@/utils/url.js'
@@ -13,18 +14,18 @@ const mobileMenuOpen = ref(false)
 const { token, userInfo, updateUser, logout } = useAuthStore()
 
 const navigation = [
-  { label: '工作台', path: '/', icon: 'Odometer' },
-  { label: '实验室资源', path: '/labs', icon: 'School' },
+  { label: '概览', path: '/', icon: 'House' },
+  { label: '学习空间', path: '/spaces', icon: 'Reading' },
   { label: '我的预约', path: '/reservations', icon: 'Calendar' },
-  { label: 'AI 智能助理', path: '/assistant', icon: 'ChatDotRound', badge: 'AI' },
+  { label: 'AI 空间助手', path: '/assistant', icon: 'ChatDotRound', badge: 'AI' },
 ]
 
 // 管理菜单只在管理员登录时出现。这只是"不给普通用户看"，不是权限控制：
 // 真正的拦截在后端接口的 get_current_admin 上。
 const adminNavigation = [
-  { label: '用户管理', path: '/admin/users', icon: 'UserFilled' },
-  { label: '实验室管理', path: '/admin/labs', icon: 'School' },
-  { label: '设备管理', path: '/admin/equipments', icon: 'Cpu' },
+  { label: '读者管理', path: '/admin/users', icon: 'UserFilled' },
+  { label: '空间管理', path: '/admin/labs', icon: 'Reading' },
+  { label: '设施管理', path: '/admin/equipments', icon: 'SetUp' },
   { label: '预约审核', path: '/admin/reservations', icon: 'Calendar' },
 ]
 const isAdmin = computed(() => userInfo.value?.role === 'admin')
@@ -32,7 +33,7 @@ const isAdmin = computed(() => userInfo.value?.role === 'admin')
 const currentTitle = computed(() => route.meta.title || '工作台')
 const userName = computed(() => userInfo.value?.name || userInfo.value?.username || '用户')
 const userAvatar = computed(() => userName.value.slice(0, 1))
-const userRole = computed(() => ({ student: '学生', admin: '管理员' })[userInfo.value?.role] || '平台用户')
+const userRole = computed(() => ({ student: '读者', admin: '管理员' })[userInfo.value?.role] || '平台用户')
 const userCaption = computed(() => `${userInfo.value?.username || '账号'} · ${userRole.value}`)
 
 const userAvatarUrl = computed(() => resolveAssetUrl(userInfo.value?.avatar))
@@ -78,14 +79,14 @@ onMounted(async () => {
     <div v-if="mobileMenuOpen" class="mobile-mask" @click="mobileMenuOpen = false"></div>
     <aside class="sidebar" :class="{ 'is-open': mobileMenuOpen }">
       <button class="brand" aria-label="返回工作台" @click="navigate('/')">
-        <span class="brand-mark"><span></span><span></span><span></span></span>
+        <span class="brand-mark"><span></span><span></span></span>
         <span>
-          <strong>LabMind</strong>
-          <small>智能实验室预约平台</small>
+          <strong>{{ BRAND.name }}</strong>
+          <small>{{ BRAND.englishName }}</small>
         </span>
       </button>
 
-      <div class="nav-caption">学习与实验</div>
+      <div class="nav-caption">阅读与空间</div>
       <nav class="side-nav">
         <button
           v-for="item in navigation"
@@ -120,13 +121,13 @@ onMounted(async () => {
       <div class="ai-guide-card">
         <span class="sparkle"><el-icon><MagicStick /></el-icon></span>
         <strong>不知道选哪间？</strong>
-        <p>告诉 AI 你的实验需求，它会分析设备与空闲时段。</p>
-        <button @click="navigate('/assistant')">开始智能匹配 <el-icon><Right /></el-icon></button>
+        <p>告诉 AI 你的学习需求，快速了解适合的空间与预约规则。</p>
+        <button @click="navigate('/assistant')">咨询空间助手 <el-icon><Right /></el-icon></button>
       </div>
 
       <div class="sidebar-footer">
         <button><el-icon><QuestionFilled /></el-icon> 使用帮助</button>
-        <span>课程设计 · v1.0</span>
+        <span>{{ BRAND.name }} · v1.0</span>
       </div>
     </aside>
 
@@ -135,7 +136,7 @@ onMounted(async () => {
         <div class="topbar-left">
           <button class="menu-button" aria-label="打开菜单" @click="mobileMenuOpen = true"><el-icon><Menu /></el-icon></button>
           <div>
-            <p class="crumb"><span>LabMind</span><el-icon><ArrowRight /></el-icon>{{ currentTitle }}</p>
+            <p class="crumb"><span>{{ BRAND.name }}</span><el-icon><ArrowRight /></el-icon>{{ currentTitle }}</p>
             <h1>{{ currentTitle }}</h1>
           </div>
         </div>
@@ -160,7 +161,7 @@ onMounted(async () => {
             </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="profile"><el-icon><User /></el-icon>个人信息</el-dropdown-item>
+                <el-dropdown-item command="profile"><el-icon><User /></el-icon>读者资料</el-dropdown-item>
                 <el-dropdown-item command="logout"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -209,4 +210,33 @@ onMounted(async () => {
   .sidebar { transform: translateX(-105%); transition: transform .25s ease; }.sidebar.is-open { transform: translateX(0); }.mobile-mask { display: block; position: fixed; inset: 0; z-index: 29; background: rgba(9, 31, 32, .45); backdrop-filter: blur(2px); }.page-shell { width: 100%; margin-left: 0; }.menu-button { display: grid; place-items: center; }.topbar { padding: 0 20px; }.main-content { padding: 24px 20px 36px; }
 }
 @media (max-width: 600px) { .profile div, .profile > .el-icon, .top-divider { display: none; }.topbar { height: 74px; }.main-content { min-height: calc(100vh - 74px); padding: 20px 15px 30px; }.topbar h1 { font-size: 19px; }.crumb { display: none; } }
+
+/* 阅见应用外壳 */
+.sidebar { color: var(--text); background: #fffefa; border-right: 1px solid var(--line); box-shadow: 10px 0 34px rgba(23,50,77,.05); }
+.brand { color: var(--ink); }
+.brand-mark { align-items: center; gap: 0; position: relative; padding: 9px 7px; background: var(--navy-900); transform: none; }
+.brand-mark span { width: 50%; height: 21px !important; background: #fffefa; }
+.brand-mark span:first-child { border-radius: 2px 0 7px 2px; transform: skewY(8deg); }
+.brand-mark span:last-child { border-radius: 0 2px 2px 7px; transform: skewY(-8deg); }
+.brand strong { color: var(--navy-900); font-family: 'Songti SC', SimSun, serif; font-size: 24px; letter-spacing: 3px; }
+.brand small { color: #8795a0; font-weight: 700; letter-spacing: 1.7px; }
+.nav-caption { color: #8c969c; }
+.nav-item { color: #566b7c; }
+.nav-item:hover { color: var(--navy-900); background: #f1eee6; }
+.nav-item.active { color: var(--navy-900); background: var(--gold-100); }
+.nav-item.active::before { background: var(--gold-600); }
+.nav-item em { color: #fff; background: var(--navy-900); }
+.ai-guide-card { border-color: #e0d1b6; background: linear-gradient(145deg, #f8f0e2, #fffdf8); }
+.sparkle { color: #fff; background: var(--navy-900); }
+.ai-guide-card strong { color: var(--ink); }
+.ai-guide-card p { color: #697987; }
+.ai-guide-card button { min-height: 44px; color: var(--gold-700); }
+.sidebar-footer { border-top-color: var(--line); }
+.sidebar-footer button, .sidebar-footer span { color: #7a8994; }
+.topbar { background: rgba(246,243,236,.92); border-bottom-color: var(--line); }
+.crumb span { color: var(--gold-700); }
+.icon-button, .menu-button { color: var(--navy-800); background: #fffefa; border-color: var(--line); }
+.avatar { background: var(--navy-900); }
+.profile strong { color: var(--ink); }
+@media (max-width: 900px) { .mobile-mask { background: rgba(16,38,58,.48); } }
 </style>
