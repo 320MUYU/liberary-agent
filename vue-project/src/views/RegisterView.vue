@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { registerApi } from '@/authApi'
+import AuthBrandPanel from '@/components/AuthBrandPanel.vue'
+import { BRAND } from '@/config/brand'
 
 const router = useRouter()
 const formRef = ref()
@@ -85,34 +87,13 @@ async function register() {
 
 <template>
   <main class="register-page">
-    <section class="register-brand-panel">
-      <div class="brand-lockup">
-        <span class="brand-mark"><span></span><span></span><span></span></span>
-        <div><strong>LabMind</strong><small>智能实验室预约平台</small></div>
-      </div>
-
-      <div class="brand-copy">
-        <span class="eyebrow">CREATE ACCOUNT</span>
-        <h1>注册一个账号<br />开启你的实验计划</h1>
-        <p>注册后即可查询实验室资源、提交预约申请，并使用 AI 智能助理帮你匹配空闲时段。</p>
-      </div>
-
-      <div class="lab-visual" aria-hidden="true">
-        <span class="orbit orbit-one"></span>
-        <span class="orbit orbit-two"></span>
-        <span class="flask"><i></i><b><em></em><em></em><em></em></b></span>
-        <span class="spark spark-one">✦</span>
-        <span class="spark spark-two">＋</span>
-      </div>
-
-      <p class="panel-footer">课程设计 · LabMind v1.0</p>
-    </section>
+    <AuthBrandPanel mode="register" />
 
     <section class="register-form-panel">
       <div class="register-card">
-        <span class="mobile-brand">LabMind</span>
-        <h2>创建账号</h2>
-        <p class="form-intro">填写以下信息完成注册，注册后返回登录</p>
+        <span class="mobile-brand">{{ BRAND.name }}</span>
+        <h2>创建读者账号</h2>
+        <p class="form-intro">填写以下信息加入阅见，注册后返回登录</p>
 
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @keyup.enter="register">
           <el-form-item label="账号" prop="username">
@@ -153,7 +134,7 @@ async function register() {
 </template>
 
 <style scoped>
-.register-page { min-height: 100vh; display: grid; grid-template-columns: minmax(420px, 1.05fr) minmax(420px, .95fr); background: #f8f7f3; }
+.register-page { min-height: 100vh; display: grid; grid-template-columns: minmax(420px, 1.05fr) minmax(420px, .95fr); background: var(--paper); }
 .register-brand-panel { min-height: 100vh; display: flex; flex-direction: column; position: relative; overflow: hidden; padding: 46px 58px 34px; color: white; background: #123b3a; }
 .register-brand-panel::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 78% 70%, rgba(126, 215, 185, .18), transparent 37%), linear-gradient(145deg, rgba(255,255,255,.025), transparent 45%); }
 .brand-lockup { display: flex; align-items: center; gap: 13px; position: relative; z-index: 2; }.brand-lockup strong { display: block; font-family: Georgia, serif; font-size: 24px; letter-spacing: .4px; }.brand-lockup small { display: block; margin-top: 1px; color: #91afad; font-size: 10px; letter-spacing: .9px; }

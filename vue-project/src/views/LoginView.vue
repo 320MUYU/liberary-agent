@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { loginApi } from '@/authApi'
+import AuthBrandPanel from '@/components/AuthBrandPanel.vue'
+import { BRAND } from '@/config/brand'
 import { useAuthStore } from '@/store/authStore'
 
 const route = useRoute()
@@ -50,34 +52,13 @@ async function login() {
 
 <template>
   <main class="login-page">
-    <section class="login-brand-panel">
-      <div class="brand-lockup">
-        <span class="brand-mark"><span></span><span></span><span></span></span>
-        <div><strong>LabMind</strong><small>智能实验室预约平台</small></div>
-      </div>
-
-      <div class="brand-copy">
-        <span class="eyebrow">SMART LABORATORY</span>
-        <h1>让每一次实验<br />从合适的空间开始</h1>
-        <p>统一管理实验室资源、预约安排与智能推荐，让学习和研究更专注。</p>
-      </div>
-
-      <div class="lab-visual" aria-hidden="true">
-        <span class="orbit orbit-one"></span>
-        <span class="orbit orbit-two"></span>
-        <span class="flask"><i></i><b><em></em><em></em><em></em></b></span>
-        <span class="spark spark-one">✦</span>
-        <span class="spark spark-two">＋</span>
-      </div>
-
-      <p class="panel-footer">课程设计 · LabMind v1.0</p>
-    </section>
+    <AuthBrandPanel />
 
     <section class="login-form-panel">
       <div class="login-card">
-        <span class="mobile-brand">LabMind</span>
+        <span class="mobile-brand">{{ BRAND.name }}</span>
         <h2>欢迎回来</h2>
-        <p class="form-intro">请使用实验室预约平台账号登录</p>
+        <p class="form-intro">请使用图书馆学习空间预约账号登录</p>
 
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @keyup.enter="login">
           <el-form-item label="账号" prop="username">
@@ -101,14 +82,14 @@ async function login() {
           还没有账号？<router-link :to="{ name: 'register' }">立即注册</router-link>
         </p>
 
-        <p class="support-text"><el-icon><InfoFilled /></el-icon> 如无法登录，请联系实验室管理员</p>
+        <p class="support-text"><el-icon><InfoFilled /></el-icon> 如无法登录，请联系图书馆管理员</p>
       </div>
     </section>
   </main>
 </template>
 
 <style scoped>
-.login-page { min-height: 100vh; display: grid; grid-template-columns: minmax(420px, 1.05fr) minmax(420px, .95fr); background: #f8f7f3; }
+.login-page { min-height: 100vh; display: grid; grid-template-columns: minmax(420px, 1.05fr) minmax(420px, .95fr); background: var(--paper); }
 .login-brand-panel { min-height: 100vh; display: flex; flex-direction: column; position: relative; overflow: hidden; padding: 46px 58px 34px; color: white; background: #123b3a; }
 .login-brand-panel::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 78% 70%, rgba(126, 215, 185, .18), transparent 37%), linear-gradient(145deg, rgba(255,255,255,.025), transparent 45%); }
 .brand-lockup { display: flex; align-items: center; gap: 13px; position: relative; z-index: 2; }.brand-lockup strong { display: block; font-family: Georgia, serif; font-size: 24px; letter-spacing: .4px; }.brand-lockup small { display: block; margin-top: 1px; color: #91afad; font-size: 10px; letter-spacing: .9px; }
