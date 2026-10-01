@@ -34,30 +34,30 @@ export function loadLabs(force = false) {
 // 卡片配色和图标按"类别"给。这类纯展示的取色不该存进数据库让管理员填，
 // 所以从原来每条数据里挪到了这里，统一按类别映射。
 const LAB_CATEGORY_STYLE = {
-  人工智能: { color: '#dceee8', accent: '#387d70' },
-  网络安全: { color: '#e7e9f2', accent: '#59658f' },
-  嵌入式: { color: '#f3e8d7', accent: '#9b7440' },
-  数字媒体: { color: '#f1dfde', accent: '#a75f5b' },
-  云计算: { color: '#e1e9ed', accent: '#527488' },
-  大数据: { color: '#e2eddd', accent: '#638754' },
+  小组研讨室: { color: '#e7edf3', accent: '#315d7c' },
+  静音自习室: { color: '#f4ecdc', accent: '#925d18' },
+  多媒体空间: { color: '#e9e4ef', accent: '#725d8c' },
+  经典阅览室: { color: '#ece5d8', accent: '#795b31' },
+  学术交流室: { color: '#e2ece8', accent: '#3f765d' },
+  无障碍空间: { color: '#e5ebf1', accent: '#456c8c' },
 }
 
 const LAB_CATEGORY_ICON = {
-  人工智能: 'DataAnalysis',
-  网络安全: 'Lock',
-  嵌入式: 'Cpu',
-  数字媒体: 'VideoCamera',
-  云计算: 'Cloudy',
-  大数据: 'Histogram',
+  小组研讨室: 'ChatLineSquare',
+  静音自习室: 'Reading',
+  多媒体空间: 'VideoCamera',
+  经典阅览室: 'Collection',
+  学术交流室: 'Presentation',
+  无障碍空间: 'User',
 }
 
 // 新类别（管理员自己加的）取不到预设值时给一套中性配色，不至于渲染成空白
 export function labStyle(category) {
-  return LAB_CATEGORY_STYLE[category] || { color: '#eaf0ee', accent: '#54807a' }
+  return LAB_CATEGORY_STYLE[category] || { color: '#e8edf1', accent: '#45647d' }
 }
 
 export function labIcon(category) {
-  return LAB_CATEGORY_ICON[category] || 'Histogram'
+  return LAB_CATEGORY_ICON[category] || 'Reading'
 }
 
 // 设备台数：按数量累加，不是按"设备种类"数
