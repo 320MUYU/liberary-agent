@@ -89,13 +89,13 @@ onMounted(fetchReservations)
       <div>
         <span>ADMIN CONSOLE</span>
         <h2>预约审核</h2>
-        <p>集中查看学生申请，核对实验室、人数和使用时间后完成审核。</p>
+        <p>集中查看读者申请，核对学习空间、人数和使用时间后完成审核。</p>
       </div>
       <div class="intro-numbers"><div><strong>{{ total }}</strong><span>{{ statusMeta[query.status]?.label || '预约' }}</span></div></div>
     </section>
 
     <section class="filter-bar surface">
-      <el-input v-model="query.keyword" clearable class="search-input" placeholder="搜索实验室、房间或申请人" @keyup.enter="search">
+      <el-input v-model="query.keyword" clearable class="search-input" placeholder="搜索学习空间、房间号或申请人" @keyup.enter="search">
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
       <el-select v-model="query.status" class="filter-select" @change="search">
@@ -111,7 +111,7 @@ onMounted(fetchReservations)
         <el-table-column label="申请人" min-width="130">
           <template #default="{ row }"><strong class="applicant">{{ row.applicant_name }}</strong><small class="muted">ID {{ row.applicant_id }}</small></template>
         </el-table-column>
-        <el-table-column label="实验室" min-width="190">
+        <el-table-column label="学习空间" min-width="190">
           <template #default="{ row }"><strong class="lab-name">{{ row.lab_name }}</strong><small class="muted">{{ row.lab_code }}</small></template>
         </el-table-column>
         <el-table-column label="预约时间" min-width="190">
@@ -149,7 +149,7 @@ onMounted(fetchReservations)
         </div>
         <el-form label-position="top">
           <el-form-item :label="review.status === 'rejected' ? '驳回理由' : '审核意见（选填）'" :required="review.status === 'rejected'">
-            <el-input v-model="review.note" type="textarea" :rows="4" maxlength="500" show-word-limit :placeholder="review.status === 'rejected' ? '请说明未通过原因，学生可在预约详情中查看' : '可填写注意事项或使用要求'" />
+            <el-input v-model="review.note" type="textarea" :rows="4" maxlength="500" show-word-limit :placeholder="review.status === 'rejected' ? '请说明未通过原因，读者可在预约详情中查看' : '可填写注意事项或使用要求'" />
           </el-form-item>
         </el-form>
       </template>
@@ -163,9 +163,9 @@ onMounted(fetchReservations)
 
 <style scoped>
 .admin-page { display: flex; flex-direction: column; gap: 20px; }
-.admin-intro { min-height: 145px; display: flex; align-items: center; justify-content: space-between; padding: 27px 31px; color: white; background: linear-gradient(120deg, #173f3d, #286b62); border-radius: 17px; }
-.admin-intro > div > span { color: #8fc9bc; font-size: 9px; font-weight: 800; letter-spacing: 2px; }.admin-intro h2 { margin-top: 7px; font-family: Georgia, 'Noto Serif SC', serif; font-size: 25px; }.admin-intro p { margin-top: 8px; color: #b9d3cf; font-size: 11px; }.intro-numbers { min-width: 110px; text-align: center; }.intro-numbers strong, .intro-numbers span { display: block; }.intro-numbers strong { font-family: Georgia, serif; font-size: 32px; }.intro-numbers span { margin-top: 3px; color: #a9ccc6; font-size: 10px; }
+.admin-intro { min-height: 145px; display: flex; align-items: center; justify-content: space-between; padding: 27px 31px; color: white; background: linear-gradient(120deg, var(--navy-950), var(--navy-800)); border-radius: 17px; box-shadow: var(--shadow-md); }
+.admin-intro > div > span { color: #e5be78; font-size: 9px; font-weight: 800; letter-spacing: 2px; }.admin-intro h2 { margin-top: 7px; color: #fff; font-size: 25px; }.admin-intro p { margin-top: 8px; color: #c5d0d8; font-size: 11px; }.intro-numbers { min-width: 110px; text-align: center; }.intro-numbers strong, .intro-numbers span { display: block; }.intro-numbers strong { color: #f0ca87; font-family: Georgia, serif; font-size: 32px; }.intro-numbers span { margin-top: 3px; color: #bdc9d1; font-size: 10px; }
 .filter-bar { display: flex; align-items: center; gap: 10px; padding: 16px 18px; }.search-input { width: min(340px, 100%); }.filter-select { width: 160px; }.table-card { overflow: hidden; }.pagination-row { display: flex; justify-content: flex-end; padding: 17px 20px; border-top: 1px solid #eceee9; }
-.applicant, .lab-name { display: block; color: #294845; font-size: 12px; }.muted { display: block; margin-top: 4px; overflow: hidden; color: #8b9895; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }.note { max-width: 210px; }.review-note { display: block; overflow: hidden; color: #81908d; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.review-summary { margin-bottom: 20px; padding: 15px 17px; background: #edf6f3; border-radius: 10px; }.review-summary strong { color: #294845; font-size: 13px; }.review-summary p { margin-top: 6px; color: #6f817e; font-size: 11px; }
+.applicant, .lab-name { display: block; color: var(--navy-900); font-size: 12px; }.muted { display: block; margin-top: 4px; overflow: hidden; color: #768894; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }.note { max-width: 210px; }.review-note { display: block; overflow: hidden; color: #71838f; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.review-summary { margin-bottom: 20px; padding: 15px 17px; background: var(--gold-100); border-radius: 10px; }.review-summary strong { color: var(--navy-900); font-size: 13px; }.review-summary p { margin-top: 6px; color: #687a88; font-size: 11px; }
 @media (max-width: 700px) { .admin-intro { align-items: flex-start; padding: 23px; }.intro-numbers { min-width: 70px; }.filter-bar { align-items: stretch; flex-wrap: wrap; }.search-input { width: 100%; }.filter-select { flex: 1; }.pagination-row { overflow-x: auto; justify-content: flex-start; } }
 </style>

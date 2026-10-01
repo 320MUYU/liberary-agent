@@ -130,9 +130,9 @@ function validateAvailable(rule, value, callback) {
 }
 
 const formRules = {
-  lab_id: [{ required: true, message: '请选择所属实验室', trigger: 'change' }],
+  lab_id: [{ required: true, message: '请选择所属学习空间', trigger: 'change' }],
   name: [
-    { required: true, message: '请输入设备名称', trigger: 'blur' },
+    { required: true, message: '请输入设施名称', trigger: 'blur' },
     { max: 50, message: '名称不能超过 50 个字符', trigger: 'blur' },
   ],
   model: [{ max: 50, message: '型号不能超过 50 个字符', trigger: 'blur' }],
@@ -198,10 +198,10 @@ async function submit() {
 
     if (editingId.value) {
       await updateEquipmentApi(editingId.value, payload)
-      ElMessage.success('设备已更新')
+      ElMessage.success('设施已更新')
     } else {
       await createEquipmentApi(payload)
-      ElMessage.success('设备已新增')
+      ElMessage.success('设施已新增')
     }
 
     dialogVisible.value = false
@@ -217,7 +217,7 @@ async function remove(row) {
   try {
     await ElMessageBox.confirm(
       `确定删除「${row.name}」吗？删除后无法恢复。`,
-      '删除设备',
+      '删除设施',
       {
         type: 'warning',
         confirmButtonText: '确认删除',
@@ -250,24 +250,24 @@ onMounted(async () => {
     <section class="admin-intro">
       <div>
         <span>ADMIN CONSOLE</span>
-        <h2>设备管理</h2>
-        <p>维护各实验室的设备清单、数量与状态，设备完好率会同步更新到学生端。</p>
+        <h2>设施管理</h2>
+        <p>维护各学习空间的配套设施、数量与状态，设施可用率会同步更新到读者端。</p>
       </div>
       <div class="intro-numbers">
-        <div><strong>{{ stats.kinds }}</strong><span>设备种类</span></div>
-        <div><strong>{{ stats.units }}</strong><span>设备台数</span></div>
+        <div><strong>{{ stats.kinds }}</strong><span>设施种类</span></div>
+        <div><strong>{{ stats.units }}</strong><span>设施数量</span></div>
         <div><strong>{{ stats.available }}</strong><span>当前可用</span></div>
-        <div><strong>{{ stats.healthy }}%</strong><span>设备完好率</span></div>
+        <div><strong>{{ stats.healthy }}%</strong><span>设施可用率</span></div>
       </div>
     </section>
 
     <section class="filter-bar surface">
       <el-select v-model="selectedLabId" class="lab-select" @change="changeLab">
-        <el-option label="全部实验室" value="" />
+        <el-option label="全部学习空间" value="" />
         <el-option
           v-for="lab in labs"
           :key="lab.id"
-          :label="`${lab.name}（${labUnitCount(lab)} 台）`"
+          :label="`${lab.name}（${labUnitCount(lab)} 件）`"
           :value="lab.id"
         />
       </el-select>
@@ -276,7 +276,7 @@ onMounted(async () => {
         v-model="query.keyword"
         clearable
         class="search-input"
-        placeholder="搜索设备名称或型号"
+        placeholder="搜索设施名称或规格型号"
         @keyup.enter="search"
       >
         <template #prefix><el-icon><Search /></el-icon></template>
@@ -290,7 +290,7 @@ onMounted(async () => {
       <el-button type="primary" @click="search">查询</el-button>
       <el-button @click="resetQuery">重置</el-button>
       <el-button type="primary" plain class="create-button" @click="openCreate">
-        <el-icon><Plus /></el-icon>新增设备
+        <el-icon><Plus /></el-icon>新增设施
       </el-button>
     </section>
 
@@ -298,9 +298,9 @@ onMounted(async () => {
       <el-table
         v-loading="loading"
         :data="rows"
-        empty-text="没有符合条件的设备"
+        empty-text="没有符合条件的设施"
       >
-        <el-table-column label="设备" min-width="220">
+        <el-table-column label="设施" min-width="220">
           <template #default="{ row }">
             <div class="equipment-cell">
               <strong>{{ row.name }}</strong>
@@ -309,7 +309,7 @@ onMounted(async () => {
           </template>
         </el-table-column>
 
-        <el-table-column label="所属实验室" min-width="160">
+        <el-table-column label="所属空间" min-width="160">
           <template #default="{ row }">{{ labNameMap[row.lab_id] || '—' }}</template>
         </el-table-column>
 
@@ -340,7 +340,7 @@ onMounted(async () => {
       </el-table>
 
       <div class="table-footer">
-        <span>共 {{ total }} 条设备记录</span>
+        <span>共 {{ total }} 条设施记录</span>
         <el-pagination
           v-model:current-page="query.page"
           v-model:page-size="query.page_size"
@@ -355,19 +355,19 @@ onMounted(async () => {
 
     <el-dialog
       v-model="dialogVisible"
-      :title="editingId ? '编辑设备' : '新增设备'"
+      :title="editingId ? '编辑设施' : '新增设施'"
       width="min(560px, 94vw)"
     >
       <el-form ref="formRef" :model="form" :rules="formRules" label-position="top">
-        <el-form-item label="所属实验室" prop="lab_id">
-          <el-select v-model="form.lab_id" class="full-width" placeholder="请选择实验室">
+        <el-form-item label="所属学习空间" prop="lab_id">
+          <el-select v-model="form.lab_id" class="full-width" placeholder="请选择学习空间">
             <el-option v-for="lab in labs" :key="lab.id" :label="lab.name" :value="lab.id" />
           </el-select>
         </el-form-item>
 
         <div class="form-row">
-          <el-form-item label="设备名称" prop="name">
-            <el-input v-model="form.name" maxlength="50" placeholder="如：图形工作站" />
+          <el-form-item label="设施名称" prop="name">
+            <el-input v-model="form.name" maxlength="50" placeholder="如：无线投屏设备" />
           </el-form-item>
           <el-form-item label="型号" prop="model">
             <el-input v-model="form.model" maxlength="50" placeholder="选填" />
@@ -402,15 +402,15 @@ onMounted(async () => {
 
 <style scoped>
 .admin-page { display: flex; flex-direction: column; gap: 18px; }
-.admin-intro { min-height: 132px; display: flex; align-items: center; justify-content: space-between; gap: 25px; padding: 26px 32px; position: relative; overflow: hidden; color: white; background: #1d5552; border-radius: 17px; }
+.admin-intro { min-height: 132px; display: flex; align-items: center; justify-content: space-between; gap: 25px; padding: 26px 32px; position: relative; overflow: hidden; color: white; background: var(--navy-900); border-radius: 17px; box-shadow: var(--shadow-md); }
 .admin-intro::after { content: ''; position: absolute; right: -45px; top: -105px; width: 260px; height: 260px; border: 1px solid rgba(126, 215, 185, .18); border-radius: 50%; }
 .admin-intro > div { position: relative; z-index: 1; }
-.admin-intro > div:first-child > span { color: #81c9b3; font-size: 8px; font-weight: 800; letter-spacing: 1.8px; }
-.admin-intro h2 { margin-top: 8px; font-family: Georgia, 'Noto Serif SC', serif; font-size: 25px; font-weight: 600; }
-.admin-intro p { margin-top: 7px; max-width: 340px; color: #abc7c3; font-size: 11px; line-height: 1.6; }
+.admin-intro > div:first-child > span { color: #e5be78; font-size: 8px; font-weight: 800; letter-spacing: 1.8px; }
+.admin-intro h2 { margin-top: 8px; color: #fff; font-size: 25px; font-weight: 600; }
+.admin-intro p { margin-top: 7px; max-width: 370px; color: #c5d0d8; font-size: 11px; line-height: 1.6; }
 .intro-numbers { display: flex; gap: 30px; margin-right: 18px; text-align: center; }
 .intro-numbers strong, .intro-numbers span { display: block; }
-.intro-numbers strong { color: #a4e5cf; font-family: Georgia, serif; font-size: 22px; }
+.intro-numbers strong { color: #f0ca87; font-family: Georgia, serif; font-size: 22px; }
 .intro-numbers span { margin-top: 2px; color: #9bbab6; font-size: 8px; }
 
 .filter-bar { display: flex; align-items: center; gap: 11px; padding: 14px; }

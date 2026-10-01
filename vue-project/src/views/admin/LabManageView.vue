@@ -91,17 +91,17 @@ const form = reactive({
 
 const rules = {
   name: [
-    { required: true, message: '请输入实验室名称', trigger: 'blur' },
+    { required: true, message: '请输入空间名称', trigger: 'blur' },
     { max: 50, message: '名称不能超过 50 个字符', trigger: 'blur' },
   ],
   code: [
     { required: true, message: '请输入房间号', trigger: 'blur' },
     { max: 20, message: '房间号不能超过 20 个字符', trigger: 'blur' },
   ],
-  building: [{ required: true, message: '请输入所属楼栋', trigger: 'blur' }],
+  building: [{ required: true, message: '请输入所在馆区', trigger: 'blur' }],
   floor: [{ required: true, message: '请输入楼层', trigger: 'blur' }],
   capacity: [{ required: true, message: '请输入可容纳人数', trigger: 'blur' }],
-  category: [{ required: true, message: '请输入或选择类别', trigger: 'change' }],
+  category: [{ required: true, message: '请输入或选择空间类型', trigger: 'change' }],
 }
 
 function resetForm() {
@@ -188,10 +188,10 @@ async function submit() {
 
     if (editingId.value) {
       await updateLabApi(editingId.value, payload)
-      ElMessage.success('实验室已更新')
+      ElMessage.success('学习空间已更新')
     } else {
       await createLabApi(payload)
-      ElMessage.success('实验室已创建')
+      ElMessage.success('学习空间已创建')
     }
 
     dialogVisible.value = false
@@ -206,11 +206,11 @@ async function submit() {
 async function remove(row) {
   const equipmentCount = row.equipments?.length || 0
   const tip = equipmentCount
-    ? `确定删除「${row.name}」吗？它名下的 ${equipmentCount} 种设备会一起被删除，且无法恢复。`
+    ? `确定删除「${row.name}」吗？它名下的 ${equipmentCount} 种设施会一起被删除，且无法恢复。`
     : `确定删除「${row.name}」吗？删除后无法恢复。`
 
   try {
-    await ElMessageBox.confirm(tip, '删除实验室', {
+    await ElMessageBox.confirm(tip, '删除学习空间', {
       type: 'warning',
       confirmButtonText: '确认删除',
       cancelButtonText: '取消',
@@ -223,7 +223,7 @@ async function remove(row) {
   try {
     await deleteLabApi(row.id)
     ElMessage.success(
-      equipmentCount ? `已删除「${row.name}」及其 ${equipmentCount} 种设备` : `已删除「${row.name}」`,
+      equipmentCount ? `已删除「${row.name}」及其 ${equipmentCount} 种设施` : `已删除「${row.name}」`,
     )
     await refreshAll()
   } catch {
@@ -243,11 +243,11 @@ onMounted(async () => {
     <section class="admin-intro">
       <div>
         <span>ADMIN CONSOLE</span>
-        <h2>实验室管理</h2>
-        <p>维护实验室的基本信息与开放状态，改动会立刻反映到学生端。</p>
+        <h2>空间管理</h2>
+        <p>维护学习空间的基本信息与开放状态，改动会立刻反映到读者端。</p>
       </div>
       <div class="intro-numbers">
-        <div><strong>{{ total }}</strong><span>实验室总数</span></div>
+        <div><strong>{{ total }}</strong><span>空间总数</span></div>
       </div>
     </section>
 
@@ -256,14 +256,14 @@ onMounted(async () => {
         v-model="query.keyword"
         clearable
         class="search-input"
-        placeholder="搜索名称、房间号或楼栋"
+        placeholder="搜索名称、房间号或馆区"
         @keyup.enter="search"
       >
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
 
       <el-select v-model="query.category" class="filter-select">
-        <el-option label="全部类别" value="" />
+        <el-option label="全部类型" value="" />
         <el-option
           v-for="item in categoryOptions"
           :key="item"
@@ -285,7 +285,7 @@ onMounted(async () => {
       <el-button type="primary" @click="search">查询</el-button>
       <el-button @click="resetQuery">重置</el-button>
       <el-button type="primary" plain class="create-button" @click="openCreate">
-        <el-icon><Plus /></el-icon>新增实验室
+        <el-icon><Plus /></el-icon>新增空间
       </el-button>
     </section>
 
@@ -294,9 +294,9 @@ onMounted(async () => {
         v-loading="loading"
         :data="rows"
         class="lab-table"
-        empty-text="没有符合条件的实验室"
+        empty-text="没有符合条件的学习空间"
       >
-        <el-table-column label="实验室" min-width="230">
+        <el-table-column label="学习空间" min-width="230">
           <template #default="{ row }">
             <div class="lab-cell">
               <span class="thumb">
@@ -319,7 +319,7 @@ onMounted(async () => {
           <template #default="{ row }">{{ row.capacity }} 人</template>
         </el-table-column>
 
-        <el-table-column label="设备" width="90">
+        <el-table-column label="设施" width="90">
           <template #default="{ row }">{{ labUnitCount(row) }} 台</template>
         </el-table-column>
 
@@ -340,7 +340,7 @@ onMounted(async () => {
       </el-table>
 
       <div class="table-footer">
-        <span>共 {{ total }} 间实验室</span>
+        <span>共 {{ total }} 个学习空间</span>
         <el-pagination
           v-model:current-page="query.page"
           v-model:page-size="query.page_size"
@@ -355,13 +355,13 @@ onMounted(async () => {
 
     <el-dialog
       v-model="dialogVisible"
-      :title="editingId ? '编辑实验室' : '新增实验室'"
+      :title="editingId ? '编辑学习空间' : '新增学习空间'"
       width="min(620px, 94vw)"
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <div class="form-row">
-          <el-form-item label="实验室名称" prop="name">
-            <el-input v-model="form.name" maxlength="50" placeholder="如：智能感知实验室" />
+          <el-form-item label="空间名称" prop="name">
+            <el-input v-model="form.name" maxlength="50" placeholder="如：知行研讨室" />
           </el-form-item>
           <el-form-item label="房间号" prop="code">
             <el-input v-model="form.code" maxlength="20" placeholder="如：A-301" />
@@ -369,7 +369,7 @@ onMounted(async () => {
         </div>
 
         <div class="form-row">
-          <el-form-item label="所属楼栋" prop="building">
+          <el-form-item label="所在馆区" prop="building">
             <el-input v-model="form.building" maxlength="50" placeholder="如：信息楼 A区" />
           </el-form-item>
           <el-form-item label="楼层" prop="floor">
@@ -381,14 +381,14 @@ onMounted(async () => {
           <el-form-item label="可容纳人数" prop="capacity">
             <el-input-number v-model="form.capacity" :min="1" :max="1000" class="number-input" />
           </el-form-item>
-          <el-form-item label="类别" prop="category">
+          <el-form-item label="空间类型" prop="category">
             <!-- allow-create：管理员可以填一个全新的类别，不用改代码 -->
             <el-select
               v-model="form.category"
               filterable
               allow-create
               default-first-option
-              placeholder="选择或输入新类别"
+              placeholder="选择或输入空间类型"
               class="full-width"
             >
               <el-option v-for="item in categoryOptions" :key="item" :label="item" :value="item" />
@@ -431,7 +431,7 @@ onMounted(async () => {
             :rows="3"
             maxlength="255"
             show-word-limit
-            placeholder="一句话说明这间实验室适合做什么"
+            placeholder="一句话说明这个学习空间适合做什么"
           />
         </el-form-item>
       </el-form>
@@ -448,15 +448,15 @@ onMounted(async () => {
 
 <style scoped>
 .admin-page { display: flex; flex-direction: column; gap: 18px; }
-.admin-intro { min-height: 132px; display: flex; align-items: center; justify-content: space-between; gap: 25px; padding: 26px 32px; position: relative; overflow: hidden; color: white; background: #1d5552; border-radius: 17px; }
+.admin-intro { min-height: 132px; display: flex; align-items: center; justify-content: space-between; gap: 25px; padding: 26px 32px; position: relative; overflow: hidden; color: white; background: var(--navy-900); border-radius: 17px; box-shadow: var(--shadow-md); }
 .admin-intro::after { content: ''; position: absolute; right: -45px; top: -105px; width: 260px; height: 260px; border: 1px solid rgba(126, 215, 185, .18); border-radius: 50%; }
 .admin-intro > div { position: relative; z-index: 1; }
-.admin-intro > div:first-child > span { color: #81c9b3; font-size: 8px; font-weight: 800; letter-spacing: 1.8px; }
-.admin-intro h2 { margin-top: 8px; font-family: Georgia, 'Noto Serif SC', serif; font-size: 25px; font-weight: 600; }
-.admin-intro p { margin-top: 7px; color: #abc7c3; font-size: 11px; }
+.admin-intro > div:first-child > span { color: #e5be78; font-size: 8px; font-weight: 800; letter-spacing: 1.8px; }
+.admin-intro h2 { margin-top: 8px; color: #fff; font-size: 25px; font-weight: 600; }
+.admin-intro p { margin-top: 7px; color: #c5d0d8; font-size: 11px; }
 .intro-numbers { margin-right: 18px; text-align: center; }
 .intro-numbers strong, .intro-numbers span { display: block; }
-.intro-numbers strong { color: #a4e5cf; font-family: Georgia, serif; font-size: 24px; }
+.intro-numbers strong { color: #f0ca87; font-family: Georgia, serif; font-size: 24px; }
 .intro-numbers span { margin-top: 2px; color: #9bbab6; font-size: 8px; }
 
 .filter-bar { display: flex; align-items: center; gap: 11px; padding: 14px; }

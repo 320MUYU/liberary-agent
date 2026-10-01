@@ -26,7 +26,7 @@ const query = reactive({
 })
 
 const roleOptions = [
-  { label: '学生', value: 'student' },
+  { label: '读者', value: 'student' },
   { label: '管理员', value: 'admin' },
 ]
 
@@ -163,11 +163,11 @@ onMounted(fetchUsers)
     <section class="admin-intro">
       <div>
         <span>ADMIN CONSOLE</span>
-        <h2>用户管理</h2>
-        <p>查看平台用户、调整角色与账号状态，操作会立即生效。</p>
+        <h2>读者管理</h2>
+        <p>查看平台注册读者、调整角色与账号状态，操作会立即生效。</p>
       </div>
       <div class="intro-numbers">
-        <div><strong>{{ total }}</strong><span>用户总数</span></div>
+        <div><strong>{{ total }}</strong><span>读者总数</span></div>
       </div>
     </section>
 
@@ -211,9 +211,9 @@ onMounted(fetchUsers)
         v-loading="loading"
         :data="rows"
         class="user-table"
-        empty-text="没有符合条件的用户"
+        empty-text="没有符合条件的读者"
       >
-        <el-table-column label="用户" min-width="200">
+        <el-table-column label="读者" min-width="200">
           <template #default="{ row }">
             <div class="user-cell">
               <span class="avatar">{{ (row.name || row.username).slice(0, 1) }}</span>
@@ -290,7 +290,7 @@ onMounted(fetchUsers)
       </el-table>
 
       <div class="table-footer">
-        <span>共 {{ total }} 位用户</span>
+        <span>共 {{ total }} 位读者</span>
         <el-pagination
           v-model:current-page="query.page"
           v-model:page-size="query.page_size"
@@ -329,15 +329,15 @@ onMounted(fetchUsers)
 
 <style scoped>
 .admin-page { display: flex; flex-direction: column; gap: 18px; }
-.admin-intro { min-height: 132px; display: flex; align-items: center; justify-content: space-between; gap: 25px; padding: 26px 32px; position: relative; overflow: hidden; color: white; background: #1d5552; border-radius: 17px; }
+.admin-intro { min-height: 132px; display: flex; align-items: center; justify-content: space-between; gap: 25px; padding: 26px 32px; position: relative; overflow: hidden; color: white; background: var(--navy-900); border-radius: 17px; box-shadow: var(--shadow-md); }
 .admin-intro::after { content: ''; position: absolute; right: -45px; top: -105px; width: 260px; height: 260px; border: 1px solid rgba(126, 215, 185, .18); border-radius: 50%; }
 .admin-intro > div { position: relative; z-index: 1; }
-.admin-intro > div:first-child > span { color: #81c9b3; font-size: 8px; font-weight: 800; letter-spacing: 1.8px; }
-.admin-intro h2 { margin-top: 8px; font-family: Georgia, 'Noto Serif SC', serif; font-size: 25px; font-weight: 600; }
-.admin-intro p { margin-top: 7px; color: #abc7c3; font-size: 11px; }
+.admin-intro > div:first-child > span { color: #e5be78; font-size: 8px; font-weight: 800; letter-spacing: 1.8px; }
+.admin-intro h2 { margin-top: 8px; color: #fff; font-size: 25px; font-weight: 600; }
+.admin-intro p { margin-top: 7px; color: #c5d0d8; font-size: 11px; }
 .intro-numbers { margin-right: 18px; text-align: center; }
 .intro-numbers strong, .intro-numbers span { display: block; }
-.intro-numbers strong { color: #a4e5cf; font-family: Georgia, serif; font-size: 24px; }
+.intro-numbers strong { color: #f0ca87; font-family: Georgia, serif; font-size: 24px; }
 .intro-numbers span { margin-top: 2px; color: #9bbab6; font-size: 8px; }
 
 .filter-bar { display: flex; align-items: center; gap: 11px; padding: 14px; }
