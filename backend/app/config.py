@@ -1,5 +1,7 @@
-from pydantic_settings import BaseSettings,SettingsConfigDict
 from pathlib import Path
+
+from pydantic import SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # APP_DIR 指向 backend/app（代码所在），BASE_DIR 指向 backend/（项目根）。
 # 配置与运行时产物（.env、uploads/）都放在 backend/ 根，不跟着代码走，
@@ -12,7 +14,10 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str
     JWT_EXPIRE_HOURS: int
     JWT_ALGORITHM: str
-
+    DEEPSEEK_API_KEY: SecretStr | None = None
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_TIMEOUT_SECONDS: float = 60.0
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
