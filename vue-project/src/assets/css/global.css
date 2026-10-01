@@ -212,3 +212,71 @@ aside {
     .section-heading { align-items: start; }
     .section-heading h2 { font-size: 17px; }
 }
+
+/* 阅见图书馆设计系统：保留旧变量别名，避免页面迁移期间出现闪烁。 */
+:root {
+    --navy-950: #10263a;
+    --navy-900: #17324d;
+    --navy-800: #234866;
+    --navy-700: #315d7c;
+    --gold-700: #925d18;
+    --gold-600: #b7791f;
+    --gold-500: #c9943c;
+    --gold-100: #f5ead6;
+    --paper: #f6f3ec;
+    --paper-deep: #eee8dc;
+    --ink: #182a3a;
+    --text: #405466;
+    --muted: #687a88;
+    --line: #ded8cc;
+    --card: #fffefa;
+    --success: #3f765d;
+    --warning: #a86522;
+    --danger: #b4473f;
+    --shadow-sm: 0 5px 18px rgba(23, 50, 77, .06);
+    --shadow-md: 0 16px 42px rgba(23, 50, 77, .1);
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+    --motion-fast: 160ms;
+    --motion-base: 220ms;
+    --mint: var(--gold-500);
+    --mint-dark: var(--navy-900);
+    --coral: #c65e4b;
+    --amber: var(--gold-600);
+    --canvas: var(--paper);
+    --el-color-primary: var(--navy-900);
+    --el-color-primary-light-3: #526b82;
+    --el-color-primary-light-5: #8b9baa;
+    --el-color-primary-light-7: #c4cdd4;
+    --el-color-primary-light-9: #edf0f2;
+    --el-color-primary-dark-2: var(--navy-950);
+    --el-color-success: var(--success);
+    --el-color-warning: var(--warning);
+    --el-color-danger: var(--danger);
+    --el-border-radius-base: var(--radius-sm);
+}
+
+html { scroll-behavior: smooth; }
+body { color: var(--text); background: var(--paper); line-height: 1.6; }
+h1, h2, h3, h4, h5, h6 { color: var(--ink); font-family: "Noto Serif SC", "Songti SC", SimSun, Georgia, serif; }
+:focus-visible { outline: 3px solid rgba(183, 121, 31, .45); outline-offset: 3px; }
+.section-heading h2 { font-size: 20px; }
+.section-heading p { color: var(--muted); font-size: 12px; }
+.text-action { min-height: 44px; color: var(--navy-800); font-size: 12px; }
+.surface { border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+.el-button { min-height: 40px; transition: all var(--motion-fast) ease; }
+.el-dialog { border: 1px solid var(--line); border-radius: var(--radius-lg) !important; }
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus { box-shadow: 0 0 0 2px rgba(23, 50, 77, .75) inset !important; }
+
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+    }
+}
