@@ -62,116 +62,116 @@ def ensure_admin(db) -> None:
         print("       （密码是随机生成的，登录后可以到「个人信息」页面自行修改）")
 
 
-# 原来写死在前端 labStore.js 里的那 6 间实验室，落库后作为初始数据。
-# 结构：(实验室字段, 设备列表)，设备每项是 (名称, 型号, 总数, 可用数, 状态)
+# 新安装环境使用的 6 个图书馆学习空间。
+# 内部仍沿用 Lab / Equipment 模型以兼容现有接口和数据库。
 SEED_LABS = [
     (
         dict(
-            name="智能感知实验室",
+            name="知行研讨室",
             code="A-301",
-            building="信息楼 A区",
+            building="主馆东区",
             floor="3F",
-            capacity=24,
-            category="人工智能",
+            capacity=12,
+            category="小组研讨室",
             status="available",
-            description="面向机器视觉、深度学习和智能感知实验，配备高性能 GPU 集群。",
+            description="适合课程协作、论文研读和小组讨论，支持无线投屏与远程交流。",
         ),
         [
-            ("GPU 工作站", "RTX 4090", 6, 5, "normal"),
-            ("机器视觉平台", "MV-VS1200", 4, 4, "normal"),
-            ("边缘计算盒", "Jetson Orin", 8, 6, "normal"),
+            ("交互显示屏", "ViewBoard 65", 1, 1, "normal"),
+            ("移动白板", "WB-120", 2, 2, "normal"),
+            ("视频会议设备", "MeetUp", 1, 1, "normal"),
         ],
     ),
     (
         dict(
-            name="网络安全实验室",
+            name="静思阅览室",
             code="B-408",
-            building="信息楼 B区",
+            building="主馆西区",
             floor="4F",
             capacity=32,
-            category="网络安全",
-            status="busy",
-            description="支持网络攻防、密码学和安全审计等综合实践教学。",
-        ),
-        [
-            ("攻防靶场平台", "CyberRange-200", 2, 2, "normal"),
-            ("网络分析仪", "N9020B", 3, 1, "repair"),
-            ("服务器集群", "PowerEdge R750", 12, 10, "normal"),
-        ],
-    ),
-    (
-        dict(
-            name="嵌入式系统实验室",
-            code="C-205",
-            building="工程训练中心",
-            floor="2F",
-            capacity=20,
-            category="嵌入式",
+            category="静音自习室",
             status="available",
-            description="提供嵌入式开发、物联网与电子系统设计所需的软硬件环境。",
+            description="面向长时阅读与个人自习，采用静音管理并提供独立照明。",
         ),
         [
-            ("数字示波器", "Tektronix MDO34", 6, 6, "normal"),
-            ("STM32 开发套件", "STM32F407", 20, 18, "normal"),
-            ("逻辑分析仪", "Logic Pro 16", 5, 4, "normal"),
+            ("护眼阅读灯", "RL-02", 32, 30, "normal"),
+            ("桌面电源插座", "PD-20W", 32, 30, "normal"),
+            ("静音储物柜", "LK-24", 24, 23, "normal"),
         ],
     ),
     (
         dict(
-            name="数字媒体实验室",
+            name="无碍学习室",
+            code="C-205",
+            building="主馆南区",
+            floor="2F",
+            capacity=10,
+            category="无障碍空间",
+            status="available",
+            description="提供无障碍通行、可调节桌椅与辅助阅读设施，支持多样化学习需求。",
+        ),
+        [
+            ("电动升降桌", "LiftDesk A2", 6, 6, "normal"),
+            ("辅助阅读器", "ReadAssist 3", 2, 2, "normal"),
+            ("大字键盘", "KB-Large", 4, 4, "normal"),
+        ],
+    ),
+    (
+        dict(
+            name="文澜多媒体室",
             code="D-602",
-            building="创新中心",
+            building="数字资源馆",
             floor="6F",
             capacity=28,
-            category="数字媒体",
+            category="多媒体空间",
             status="available",
-            description="适合虚拟现实、数字内容创作、人机交互与三维动画项目。",
+            description="支持影像资料阅览、课程展示和小型分享活动，配备完整影音设施。",
         ),
         [
-            ("动作捕捉系统", "OptiTrack Prime 41", 2, 2, "normal"),
-            ("VR 头显", "Meta Quest 3", 10, 9, "normal"),
-            ("图形工作站", "ThinkStation P620", 8, 7, "normal"),
+            ("高清投影仪", "EB-L260F", 1, 1, "normal"),
+            ("会议音响", "Stage 360", 1, 1, "normal"),
+            ("公共电脑", "ThinkCentre M90", 12, 11, "normal"),
         ],
     ),
     (
         dict(
-            name="云计算联合实验室",
+            name="古籍阅览室",
             code="A-507",
-            building="信息楼 A区",
+            building="特藏馆",
+            floor="5F",
+            capacity=16,
+            category="经典阅览室",
+            status="maintenance",
+            description="用于馆藏古籍与特藏资料阅览，需遵守特藏资料使用规范。",
+        ),
+        [
+            ("专用阅览桌", "Archive Desk", 8, 8, "normal"),
+            ("恒温恒湿设备", "TH-200", 2, 2, "normal"),
+            ("无紫外阅读灯", "UV-Free L1", 16, 14, "repair"),
+        ],
+    ),
+    (
+        dict(
+            name="博雅交流室",
+            code="B-503",
+            building="主馆北区",
             floor="5F",
             capacity=36,
-            category="云计算",
-            status="maintenance",
-            description="部署私有云教学平台，满足分布式计算和云原生实践需求。",
-        ),
-        [
-            ("云平台节点", "PowerEdge R760", 8, 6, "normal"),
-            ("存储阵列", "NetApp AFF A250", 2, 2, "normal"),
-            ("高速交换机", "Nexus 93180YC", 4, 3, "repair"),
-        ],
-    ),
-    (
-        dict(
-            name="大数据创新实验室",
-            code="B-503",
-            building="信息楼 B区",
-            floor="5F",
-            capacity=40,
-            category="大数据",
+            category="学术交流室",
             status="available",
-            description="支持数据采集、分布式处理、可视化和数据挖掘课程实践。",
+            description="适合读书会、学术沙龙与跨学科交流，可灵活调整桌椅布局。",
         ),
         [
-            ("Hadoop 集群节点", "PowerEdge R750", 10, 9, "normal"),
-            ("数据可视化大屏", "Samsung QB75R", 2, 2, "normal"),
-            ("高性能服务器", "ProLiant DL380", 6, 5, "normal"),
+            ("会议显示屏", "Samsung QB75", 2, 2, "normal"),
+            ("无线投屏设备", "ClickShare C-10", 2, 2, "normal"),
+            ("可移动桌椅", "FlexSeat", 36, 34, "normal"),
         ],
     ),
 ]
 
 
 def ensure_labs(db) -> None:
-    """按房间号补齐实验室及其设备
+    """按房间号补齐学习空间及其设施
 
     以 code（房间号）作为判重的依据：它是唯一索引，也是"这间实验室有没有
     被登记过"最自然的判断标准。已经存在的整条跳过，不覆盖管理员后来改过的内容。
@@ -180,7 +180,7 @@ def ensure_labs(db) -> None:
 
     for lab_data, equipments in SEED_LABS:
         if db.query(Lab).filter(Lab.code == lab_data["code"]).first():
-            print(f"[跳过] 实验室已存在：{lab_data['name']}（{lab_data['code']}）")
+            print(f"[跳过] 学习空间已存在：{lab_data['name']}（{lab_data['code']}）")
             continue
 
         lab = Lab(**lab_data)
@@ -203,10 +203,10 @@ def ensure_labs(db) -> None:
 
         db.commit()
         created += 1
-        print(f"[新增] {lab_data['name']}（{lab_data['code']}），含 {len(equipments)} 种设备")
+        print(f"[新增] {lab_data['name']}（{lab_data['code']}），含 {len(equipments)} 种设施")
 
     if not created:
-        print("[跳过] 实验室数据已经齐了")
+        print("[跳过] 学习空间数据已经齐了")
 
 
 def main() -> None:
