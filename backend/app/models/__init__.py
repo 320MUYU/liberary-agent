@@ -11,7 +11,22 @@ Base.metadata，create_all 也就不会建它的表。所以在包的 __init__ �
 
 from app.models.equipments import Equipment
 from app.models.labs import Lab
+from app.models.knowledge import (
+    KnowledgeChunk,
+    KnowledgeDocument,
+    KnowledgeJob,
+    KnowledgeVersion,
+)
 from app.models.reservations import Reservation
 from app.models.users import User
 
-__all__ = ["Equipment", "Lab", "Reservation", "User"]
+__all__ = [
+    "Equipment",
+    "Lab",
+    "Reservation",
+    "User",
+    "KnowledgeDocument",
+    "KnowledgeVersion",
+    "KnowledgeChunk",
+    "KnowledgeJob",
+]
