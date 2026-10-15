@@ -1,6 +1,7 @@
 from pathlib import Path
+from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # APP_DIR 指向 backend/app（代码所在），BASE_DIR 指向 backend/（项目根）。
@@ -19,11 +20,16 @@ class Settings(BaseSettings):
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_TIMEOUT_SECONDS: float = 60.0
     RAG_ENABLED: bool = False
+    EMBEDDING_PROVIDER: Literal["dashscope", "openai-compatible"] = "dashscope"
+    EMBEDDING_BASE_URL: str = ""
+    EMBEDDING_API_KEY: SecretStr | None = None
+    EMBEDDING_BATCH_SIZE: int = Field(default=32, ge=1, le=128)
     DASHSCOPE_API_KEY: SecretStr | None = None
     # Copy the native synchronous endpoint from the console for your workspace/region.
     DASHSCOPE_EMBEDDING_URL: str = ""
     EMBEDDING_MODEL: str = "text-embedding-v4"
-    EMBEDDING_DIMENSIONS: int = 1024
+    EMBEDDING_DIMENSIONS: int = Field(default=1024, gt=0, le=65536,
+        validation_alias=AliasChoices("EMBEDDING_DIMENSIONS", "EMBEDDING_DIMENSION"))
     EMBEDDING_TIMEOUT_SECONDS: float = Field(default=15.0, gt=0, le=60)
     EMBEDDING_MAX_RETRIES: int = Field(default=2, ge=0, le=5)
     CHROMA_HOST: str = "127.0.0.1"
@@ -47,8 +53,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_rag(self):
-        if self.EMBEDDING_DIMENSIONS not in {64, 128, 256, 512, 768, 1024, 1536, 2048}:
+        if self.EMBEDDING_PROVIDER == "dashscope" and self.EMBEDDING_DIMENSIONS not in {64, 128, 256, 512, 768, 1024, 1536, 2048}:
             raise ValueError("不支持的 text-embedding-v4 维度")
+        if self.EMBEDDING_MODEL.lower() == "baai/bge-m3" and self.EMBEDDING_DIMENSIONS != 1024:
+            raise ValueError("BGE-M3 必须使用 1024 维向量")
         if self.RAG_CHUNK_OVERLAP >= self.RAG_CHUNK_SIZE:
             raise ValueError("切片重叠必须小于切片长度")
         if self.RAG_TOP_K > self.RAG_CANDIDATES:

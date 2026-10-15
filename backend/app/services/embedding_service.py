@@ -32,11 +32,18 @@ def _endpoint(value: str) -> str:
 def get_embedding_profile(config=None) -> dict:
     """Changing an embedding space creates a separate collection, independent of API keys."""
     config = config or settings
+    provider = getattr(config, "EMBEDDING_PROVIDER", "dashscope")
+    if provider not in {"dashscope", "openai-compatible"}:
+        raise BusinessException(code=503, message="不支持的向量服务类型")
     profile = {
         "model": str(getattr(config, "EMBEDDING_MODEL", "text-embedding-v4")).strip(),
-        "endpoint": _endpoint(getattr(config, "DASHSCOPE_EMBEDDING_URL", "")),
+        "endpoint": (_endpoint(getattr(config, "EMBEDDING_BASE_URL", "")) + "/embeddings"
+                     if provider == "openai-compatible"
+                     else _endpoint(getattr(config, "DASHSCOPE_EMBEDDING_URL", ""))),
         "dimensions": getattr(config, "EMBEDDING_DIMENSIONS", 1024),
     }
+    if provider == "openai-compatible":
+        profile["provider"] = provider
     if (
         not profile["model"]
         or type(profile["dimensions"]) is not int
@@ -127,11 +134,7 @@ class DashScopeEmbeddings(Embeddings):
                 response = client.post(
                     self.endpoint,
                     headers={"Authorization": f"Bearer {self._api_key}"},
-                    json={
-                        "model": self.model,
-                        "input": {"texts": texts},
-                        "parameters": {"text_type": text_type, "dimension": self.dimensions},
-                    },
+                    json=self._payload(texts, text_type),
                     timeout=self.timeout,
                 )
             except httpx.TransportError:
@@ -146,14 +149,24 @@ class DashScopeEmbeddings(Embeddings):
             self._sleep(min(0.25 * 2**attempt, 2.0))
         raise BusinessException(code=503, message="知识库向量服务暂时不可用，请稍后重试")
 
+    def _payload(self, texts: list[str], text_type: str) -> dict:
+        return {
+            "model": self.model,
+            "input": {"texts": texts},
+            "parameters": {"text_type": text_type, "dimension": self.dimensions},
+        }
+
+    def _entries(self, response: httpx.Response):
+        return response.json()["output"]["embeddings"], "text_index"
+
     def _decode(self, response: httpx.Response, count: int) -> list[list[float]]:
         try:
-            entries = response.json()["output"]["embeddings"]
+            entries, index_key = self._entries(response)
             if not isinstance(entries, list) or len(entries) != count:
                 raise ValueError
             ordered = [None] * count
             for entry in entries:
-                index = entry["text_index"]
+                index = entry[index_key]
                 vector = entry["embedding"]
                 if (
                     type(index) is not int
@@ -171,3 +184,32 @@ class DashScopeEmbeddings(Embeddings):
             return ordered
         except (ValueError, TypeError, KeyError, OverflowError):
             raise BusinessException(code=502, message="知识库向量服务返回的数据无效，请联系管理员") from None
+
+
+class OpenAICompatibleEmbeddings(DashScopeEmbeddings):
+    """OpenAI embeddings wire format; reuse bounded transport and vector validation."""
+
+    def __init__(self, *, api_key=None, endpoint=None, batch_size=None, **kwargs):
+        super().__init__(
+            api_key=api_key if api_key is not None else (settings.EMBEDDING_API_KEY or ""),
+            endpoint=_endpoint(endpoint if endpoint is not None else settings.EMBEDDING_BASE_URL) + "/embeddings",
+            **kwargs,
+        )
+        self.BATCH_SIZE = batch_size if batch_size is not None else settings.EMBEDDING_BATCH_SIZE
+        if type(self.BATCH_SIZE) is not int or not 1 <= self.BATCH_SIZE <= 128:
+            raise BusinessException(code=503, message="向量批量大小配置无效")
+
+    def _payload(self, texts: list[str], text_type: str) -> dict:
+        # BGE-M3 has a fixed output size; do not send the optional dimensions parameter.
+        return {"model": self.model, "input": texts, "encoding_format": "float"}
+
+    def _entries(self, response: httpx.Response):
+        return response.json()["data"], "index"
+
+
+def create_embeddings(**kwargs) -> Embeddings:
+    if settings.EMBEDDING_PROVIDER == "openai-compatible":
+        return OpenAICompatibleEmbeddings(**kwargs)
+    if settings.EMBEDDING_PROVIDER == "dashscope":
+        return DashScopeEmbeddings(**kwargs)
+    raise BusinessException(code=503, message="不支持的向量服务类型")

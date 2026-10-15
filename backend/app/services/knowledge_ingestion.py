@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeJob, KnowledgeVersion
-from app.services.embedding_service import DashScopeEmbeddings, get_embedding_profile
+from app.services.embedding_service import create_embeddings, get_embedding_profile
 from app.services.knowledge_parser import parse_document
 from app.services.knowledge_service import private_path
 from app.services.vector_store import ChromaVectorStore
@@ -92,7 +92,7 @@ def process_next_job(db: Session, *, embeddings=None, store=None) -> bool:
             if embeddings is None:
                 if get_embedding_profile()["fingerprint"] != version.embedding_profile:
                     raise ValueError("embedding profile changed")
-                embeddings = DashScopeEmbeddings()
+                embeddings = create_embeddings()
             if _guard(db, identifier, token) is None:
                 return True
             version.status = "indexing"
