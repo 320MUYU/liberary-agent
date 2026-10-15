@@ -18,7 +18,8 @@ def create_database_if_not_exists() -> None:
         raise ValueError(f"不合法的数据库名称: {database_name}")
 
     server_engine = create_engine(
-        database_url.set(database=None),
+        # URL.set 忽略 None；必须显式清空数据库，才能连接尚未建库的服务器。
+        database_url._replace(database=None),
         isolation_level="AUTOCOMMIT",
     )
     try:

@@ -21,12 +21,22 @@ SYSTEM_PROMPT = """你是“阅见”图书馆学习空间预约系统的 AI 空
 3. 管理员审核通过后，读者可以按预约时段使用学习空间。
 4. 用户可以在系统允许的时间范围内取消自己的待审核或已通过预约。
 
-当前仅接入通用大模型对话，尚未接入 RAG 知识库，也不能直接读取实时空间、设施和预约数据，不能替用户提交或修改预约。
+当前普通聊天模式尚未接入 RAG 知识库；馆规问答请切换知识库模式。当前不能直接读取实时空间、设施和预约数据，不能替用户提交或修改预约。
 遇到需要校规、馆规或实时数据的问题，请说明能力边界并引导用户前往对应页面查看，不要编造规定、学习空间、设施、空闲时段或预约结果。"""
 
 
 @lru_cache
 def get_chat_model() -> ChatDeepSeek:
+    return _create_chat_model(max_retries=0)
+
+
+@lru_cache
+def get_knowledge_model() -> ChatDeepSeek:
+    # Retrieval, rewriting and generation share one request budget.
+    return _create_chat_model(max_retries=0, max_tokens=1024)
+
+
+def _create_chat_model(max_retries: int, max_tokens: int | None = None) -> ChatDeepSeek:
     api_key = settings.DEEPSEEK_API_KEY
     if api_key is None or not api_key.get_secret_value().strip():
         raise BusinessException(code=503, message="AI 服务尚未配置，请联系管理员")
@@ -36,7 +46,8 @@ def get_chat_model() -> ChatDeepSeek:
         api_key=api_key,
         base_url=settings.DEEPSEEK_BASE_URL,
         timeout=settings.DEEPSEEK_TIMEOUT_SECONDS,
-        max_retries=2,
+        max_retries=max_retries,
+        max_tokens=max_tokens,
         temperature=0.2,
     )
 
@@ -49,7 +60,11 @@ def build_model_messages(data: ChatRequest) -> list[BaseMessage]:
     return messages
 
 
-def chat(data: ChatRequest, model: BaseChatModel | None = None) -> ChatResponse:
+def chat(data: ChatRequest, model: BaseChatModel | None = None, db=None) -> ChatResponse:
+    if data.mode == "knowledge":
+        from app.services.rag_service import knowledge_chat
+
+        return knowledge_chat(data, db, model=model)
     try:
         chat_model = model or get_chat_model()
         response = chat_model.invoke(build_model_messages(data))

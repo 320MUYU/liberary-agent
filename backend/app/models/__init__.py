@@ -13,7 +13,24 @@ from app.models.book_copies import BookCopy
 from app.models.books import Book
 from app.models.equipments import Equipment
 from app.models.labs import Lab
+from app.models.knowledge import (
+    KnowledgeChunk,
+    KnowledgeDocument,
+    KnowledgeJob,
+    KnowledgeVersion,
+)
 from app.models.reservations import Reservation
 from app.models.users import User
 
-__all__ = ["Book", "BookCopy", "Equipment", "Lab", "Reservation", "User"]
+__all__ = [
+    "Book",
+    "BookCopy",
+    "Equipment",
+    "Lab",
+    "Reservation",
+    "User",
+    "KnowledgeDocument",
+    "KnowledgeVersion",
+    "KnowledgeChunk",
+    "KnowledgeJob",
+]

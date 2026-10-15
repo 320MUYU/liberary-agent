@@ -8,27 +8,68 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
-      meta: { title: '登录', public: true, layout: 'blank' },
+      meta: { title: '登录', public: true, layout: 'blank' }
     },
     {
       path: '/register',
       name: 'register',
       component: () => import('@/views/RegisterView.vue'),
-      meta: { title: '注册', public: true, layout: 'blank' },
+      meta: { title: '注册', public: true, layout: 'blank' }
     },
-    { path: '/', component: () => import('@/views/DashboardView.vue'), meta: { title: '概览', requiresAuth: true } },
-    { path: '/spaces', component: () => import('@/views/LabsView.vue'), meta: { title: '学习空间', requiresAuth: true } },
+    {
+      path: '/',
+      component: () => import('@/views/DashboardView.vue'),
+      meta: { title: '概览', requiresAuth: true }
+    },
+    {
+      path: '/spaces',
+      component: () => import('@/views/LabsView.vue'),
+      meta: { title: '学习空间', requiresAuth: true }
+    },
     { path: '/labs', redirect: '/spaces' },
-    { path: '/reservations', component: () => import('@/views/ReservationsView.vue'), meta: { title: '我的预约', requiresAuth: true } },
-    { path: '/assistant', component: () => import('@/views/AssistantView.vue'), meta: { title: 'AI 空间助手', requiresAuth: true } },
-    { path: '/profile', component: () => import('@/views/ProfileView.vue'), meta: { title: '读者资料', requiresAuth: true } },
-    { path: '/admin/users', component: () => import('@/views/admin/UserManageView.vue'), meta: { title: '读者管理', requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/labs', component: () => import('@/views/admin/LabManageView.vue'), meta: { title: '空间管理', requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/equipments', component: () => import('@/views/admin/EquipmentManageView.vue'), meta: { title: '设施管理', requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/reservations', component: () => import('@/views/admin/ReservationManageView.vue'), meta: { title: '预约审核', requiresAuth: true, requiresAdmin: true } },
-    { path: '/:pathMatch(.*)*', redirect: '/' },
+    {
+      path: '/reservations',
+      component: () => import('@/views/ReservationsView.vue'),
+      meta: { title: '我的预约', requiresAuth: true }
+    },
+    {
+      path: '/assistant',
+      component: () => import('@/views/AssistantView.vue'),
+      meta: { title: 'AI 空间助手', requiresAuth: true }
+    },
+    {
+      path: '/profile',
+      component: () => import('@/views/ProfileView.vue'),
+      meta: { title: '读者资料', requiresAuth: true }
+    },
+    {
+      path: '/admin/users',
+      component: () => import('@/views/admin/UserManageView.vue'),
+      meta: { title: '读者管理', requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/admin/labs',
+      component: () => import('@/views/admin/LabManageView.vue'),
+      meta: { title: '空间管理', requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/admin/equipments',
+      component: () => import('@/views/admin/EquipmentManageView.vue'),
+      meta: { title: '设施管理', requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/admin/reservations',
+      component: () => import('@/views/admin/ReservationManageView.vue'),
+      meta: { title: '预约审核', requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/admin/knowledge',
+      component: () => import('@/views/admin/KnowledgeManageView.vue'),
+      meta: { title: '知识库管理', requiresAuth: true, requiresAdmin: true }
+    },
+    { path: '/:pathMatch(.*)*', redirect: '/' }
   ],
-  scrollBehavior: () => ({ top: 0 }),
+  scrollBehavior: () => ({ top: 0 })
 })
 
 router.beforeEach((to) => {

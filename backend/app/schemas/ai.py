@@ -21,6 +21,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1, max_length=30)
+    mode: Literal["chat", "knowledge"] = "chat"
 
     @model_validator(mode="after")
     def validate_conversation(self):
@@ -33,6 +34,21 @@ class ChatRequest(BaseModel):
         return self
 
 
+class ChatSource(BaseModel):
+    number: int = Field(gt=0)
+    chunk_id: int = Field(gt=0)
+    document_id: int = Field(gt=0)
+    title: str
+    version: int = Field(gt=0)
+    page: int | None = None
+    section: str | None = None
+    excerpt: str
+
+
 class ChatResponse(BaseModel):
     role: Literal["assistant"] = "assistant"
     content: str
+    sources: list[ChatSource] = Field(default_factory=list)
+    retrieval_status: Literal[
+        "not_requested", "matched", "no_match", "insufficient_evidence"
+    ] = "not_requested"
