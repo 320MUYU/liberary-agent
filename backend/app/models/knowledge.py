@@ -38,6 +38,7 @@ class KnowledgeVersion(Base):
         CheckConstraint("version_number > 0", name="ck_knowledge_version_number"),
         CheckConstraint("size_bytes >= 0", name="ck_knowledge_version_size"),
         CheckConstraint("chunk_count >= 0", name="ck_knowledge_version_chunks"),
+        CheckConstraint("chunk_size > 0 AND chunk_overlap >= 0 AND chunk_overlap < chunk_size", name="ck_knowledge_version_split"),
         {"comment": "知识库文档不可变版本和索引配置"},
     )
 
@@ -51,6 +52,8 @@ class KnowledgeVersion(Base):
     size_bytes: Mapped[int] = mapped_column()
     status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
     chunk_count: Mapped[int] = mapped_column(default=0)
+    chunk_size: Mapped[int] = mapped_column(default=800)
+    chunk_overlap: Mapped[int] = mapped_column(default=100)
     embedding_profile: Mapped[str] = mapped_column(String(255))
     collection_name: Mapped[str] = mapped_column(String(255))
     error_message: Mapped[str | None] = mapped_column(Text)
