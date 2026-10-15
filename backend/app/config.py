@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     EMBEDDING_MAX_RETRIES: int = Field(default=2, ge=0, le=5)
     CHROMA_HOST: str = "127.0.0.1"
     CHROMA_PORT: int = Field(default=8001, ge=1, le=65535)
+    CHROMA_TIMEOUT_SECONDS: float = Field(default=10.0, gt=0, le=60)
     KNOWLEDGE_DIR: Path = BASE_DIR / "data" / "knowledge"
     KNOWLEDGE_MAX_BYTES: int = Field(default=10 * 1024 * 1024, gt=0)
     KNOWLEDGE_MAX_CHARS: int = Field(default=500_000, gt=0)
@@ -38,6 +39,9 @@ class Settings(BaseSettings):
     RAG_TOP_K: int = Field(default=4, ge=1, le=10)
     RAG_MAX_DISTANCE: float = Field(default=0.6, ge=0, le=2)
     RAG_CONTEXT_CHARS: int = Field(default=6000, ge=800, le=12000)
+    RAG_HISTORY_CHARS: int = Field(default=6000, ge=1000, le=12000)
+    RAG_QUERY_CHARS: int = Field(default=1000, ge=100, le=2000)
+    RAG_REQUEST_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0, le=180)
     KNOWLEDGE_JOB_MAX_ATTEMPTS: int = Field(default=3, ge=1, le=10)
     KNOWLEDGE_JOB_LEASE_SECONDS: int = Field(default=600, ge=30)
 
