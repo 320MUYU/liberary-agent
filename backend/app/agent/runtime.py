@@ -16,6 +16,7 @@ from app.agent.tools import execute_read_tool, tool_definitions
 from app.common.exceptions import BusinessException
 from app.config import settings
 from app.models.agent import AgentRun
+from app.services.book_discovery import refresh_books
 from app.services.ai_services import _create_chat_model
 
 
@@ -61,14 +62,17 @@ def start_run(db, user_id, request_id, query):
     return run_graph(db, user_id, request_id, "retry")
 
 
-def graph_view(run_id, snapshot):
+def graph_view(run_id, snapshot, db=None):
     for task in snapshot.tasks:
         if task.interrupts:
-            value = task.interrupts[0].value
+            value = dict(task.interrupts[0].value)
+            if value["kind"] == "select_book" and db is not None:
+                value["books"] = refresh_books(db, value["books"])
             return {"run_id": run_id, "status": value["kind"], **{k: v for k, v in value.items() if k != "kind"}}
     state = snapshot.values
     return {"run_id": run_id, "status": state.get("status", "retryable"),
             "message": state.get("message", "任务尚未完成，可重试继续。"),
+            "degraded": state.get("degraded", []),
             "receipt": state.get("receipt"), "action": state.get("action")}
 
 
@@ -108,7 +112,7 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
                 execute=execute)
             config = {"configurable": {"thread_id": run_id}, "recursion_limit": 24}
             snapshot = graph.get_state(config)
-            view = graph_view(run_id, snapshot)
+            view = graph_view(run_id, snapshot, db)
             if operation == "view":
                 return view
             if operation == "select":
@@ -136,7 +140,7 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
                     return view
                 inputs = None if snapshot.values else {"query": query, "books": [], "messages": [], "model_calls": 0, "tool_calls": 0}
             graph.invoke(inputs, config)
-            return graph_view(run_id, graph.get_state(config))
+            return graph_view(run_id, graph.get_state(config), db)
     except BusinessException:
         raise
     except Exception:

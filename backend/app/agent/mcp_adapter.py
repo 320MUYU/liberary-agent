@@ -67,7 +67,9 @@ def read_tool(user_id, name, arguments, budget):
         if name not in SCHEMAS:
             return error("tool_not_allowed", "不支持的工具")
         arguments = SCHEMAS[name].model_validate(arguments).model_dump()
-        return asyncio.run(_call(user_id, name, arguments, min(15, budget.remaining())))
+        result = asyncio.run(_call(user_id, name, arguments, min(15, budget.remaining())))
+        budget.remaining()
+        return result
     except ValidationError:
         return error("invalid_arguments", "工具参数不合法")
     except BudgetExceeded:

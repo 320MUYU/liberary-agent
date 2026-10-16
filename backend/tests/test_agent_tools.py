@@ -11,6 +11,17 @@ class AgentToolsTest(unittest.TestCase):
     setUp = fixtures.LoanServiceTest.setUp
     add_book = fixtures.LoanServiceTest.add_book
 
+    def test_topic_search_returns_metadata_and_degradation_without_writing(self):
+        self.book.category = "历史图书"
+        self.db.commit()
+        with patch("app.services.book_discovery.settings.RAG_ENABLED", False):
+            result = execute_read_tool(self.db, self.reader.id, "search_books",
+                {"keyword": "推荐一些历史书", "mode": "topic"}, RunBudget())
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"]["books"][0]["match_reasons"], ["分类：历史图书"])
+        self.assertEqual(result["data"]["retrieval"]["status"], "degraded")
+        self.assertEqual(self.db.query(Loan).count(), 0)
+
     def test_search_returns_only_active_books_and_never_writes(self):
         self.add_book(title="Python 隐藏", barcode="HIDDEN", is_active=False)
         self.db.commit()

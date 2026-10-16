@@ -13,6 +13,20 @@ class AgentApiTest(unittest.TestCase):
     request = fixtures.LibraryFlowTest.request
     catalogue = fixtures.LibraryFlowTest.catalogue
 
+    def test_refresh_rechecks_inventory_and_blocks_unavailable_selection(self):
+        book = self.setup_agent()
+        run = self.start()
+        path = "/agent/runs/" + run["run_id"]
+        self.assertEqual(run["books"][0]["available_copies"], 1)
+        loan = self.request("POST", "/loans", role="other", json={"book_id": book["id"]})
+        self.request("POST", f"/admin/loans/{loan['id']}/confirm-borrow", json={})
+        restored = self.request("GET", path, role="reader")
+        self.assertEqual(restored["books"][0]["available_copies"], 0)
+        response = self.client.post("/api" + path + "/select", headers=self.headers["reader"],
+            json={"book_id": book["id"]})
+        self.assertEqual(response.json()["code"], 409)
+        self.assertEqual(self.request("GET", "/loans", role="reader")["total"], 0)
+
     def setup_agent(self):
         transport = patch("app.agent.runtime.settings.AGENT_TOOL_TRANSPORT", "local")
         transport.start(); self.addCleanup(transport.stop)

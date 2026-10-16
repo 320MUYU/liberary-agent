@@ -10,6 +10,17 @@ from app.agent.graph import build_graph
 
 
 class AgentGraphTest(unittest.TestCase):
+    def test_degradation_survives_selection_interrupt(self):
+        responses = iter([AIMessage(content="", tool_calls=[{"id": "t", "name": "search_books",
+            "args": {"keyword": "历史", "mode": "topic"}}]), AIMessage(content="")])
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            graph = build_graph(saver, lambda _: next(responses), lambda *_: {"ok": True, "data": {
+                "books": [{"id": 1, "sources": [{"chunk_id": 2}]}],
+                "retrieval": {"status": "degraded", "degraded": ["vector_unavailable"]}}})
+            result = graph.invoke({"query": "历史"}, {"configurable": {"thread_id": "degraded"}})
+            value = result["__interrupt__"][0].value
+            self.assertIn("vector_unavailable", value["degraded"])
+            self.assertEqual(value["books"][0]["sources"][0]["chunk_id"], 2)
     def test_unavailable_tools_are_not_reported_as_empty_catalogue(self):
         with SqliteSaver.from_conn_string(":memory:") as saver:
             graph = build_graph(saver, lambda _: AIMessage(content="", tool_calls=[{"id": "t", "name": "search_books", "args": {"keyword": "Python"}}]), lambda *_: {"ok": False, "error_code": "unavailable"})

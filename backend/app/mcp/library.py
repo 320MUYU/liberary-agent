@@ -1,5 +1,5 @@
 from contextvars import ContextVar
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field, StrictBool
@@ -50,9 +50,10 @@ def create_server(session_factory=SessionLocal):
             return execute_read_tool(db, int(claims["sub"]), name, arguments, RunBudget())
 
     @server.tool()
-    async def search_books(keyword: str, page: Annotated[int, Field(strict=True, ge=1, le=100)] = 1) -> dict[str, Any]:
-        """查询上架书目，不提交借阅申请。"""
-        return read("search_books", {"keyword": keyword, "page": page})
+    async def search_books(keyword: str, page: Annotated[int, Field(strict=True, ge=1, le=100)] = 1,
+                           mode: Literal["auto", "exact", "topic"] = "auto") -> dict[str, Any]:
+        """按具体书名或主题查询上架书目、匹配依据和实时馆藏，不提交申请。"""
+        return read("search_books", {"keyword": keyword, "page": page, "mode": mode})
 
     @server.tool()
     async def get_book(book_id: Annotated[int, Field(strict=True, gt=0)]) -> dict[str, Any]:
