@@ -140,6 +140,26 @@ class LoanMySQLConcurrencyTest(unittest.TestCase):
             self.db.query(Loan).filter(Loan.id.in_(ids), Loan.active_copy_id.is_not(None)).count(), 1
         )
 
+    def test_agent_confirmation_replays_return_one_committed_receipt(self):
+        from app.agent.actions import prepare_borrow, decide_borrow
+        previous, book = self.pending("agent-idempotency")
+        loan_service.cancel_loan(self.db, self.reader, previous.id)
+        user_id, book_id = self.reader.id, book.id
+        action = prepare_borrow(self.db, user_id, str(uuid4()), book_id)
+        self.db.commit()
+        barrier = Barrier(2)
+        def confirm():
+            with Session(self.engine) as db:
+                db.execute(text("SET SESSION innodb_lock_wait_timeout = 5"))
+                barrier.wait(timeout=10)
+                return decide_borrow(db, user_id, action["id"], True)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(confirm) for _ in range(2)]
+            results = [future.result(timeout=20) for future in futures]
+        self.assertEqual(results[0], results[1])
+        self.db.expire_all()
+        self.assertEqual(self.db.query(Loan).filter_by(reader_id=user_id, book_id=book_id, status="pending").count(), 1)
+
     def test_mysql_inventory_contract_uses_integer_json_before_and_after_borrow(self):
         loan, book = self.pending("integer-stock")
         before = book_service.book_response(self.db, book).model_dump(mode="json")
