@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str
     JWT_EXPIRE_HOURS: int
     JWT_ALGORITHM: str
+    BOOK_LOAN_DAYS: int = Field(default=30, ge=1, le=365)
+    BOOK_MAX_ACTIVE_LOANS: int = Field(default=5, ge=1, le=100)
     DEEPSEEK_API_KEY: SecretStr | None = None
     DEEPSEEK_MODEL: str = "deepseek-chat"
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"

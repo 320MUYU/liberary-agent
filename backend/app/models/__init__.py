@@ -13,6 +13,7 @@ from app.models.book_copies import BookCopy
 from app.models.books import Book
 from app.models.equipments import Equipment
 from app.models.labs import Lab
+from app.models.loans import Loan
 from app.models.knowledge import (
     KnowledgeChunk,
     KnowledgeDocument,
@@ -28,6 +29,7 @@ __all__ = [
     "Equipment",
     "Lab",
     "Reservation",
+    "Loan",
     "User",
     "KnowledgeDocument",
     "KnowledgeVersion",
