@@ -58,3 +58,13 @@ export function safeKnowledgeError(message) {
   }
   return text.slice(0, 300)
 }
+
+export function validateRetrievalQuery(query) {
+  if (!String(query || '').trim()) return '请输入要检查的问题'
+  if ([...String(query).trim()].length > 1000) return '问题不能超过 1000 个字符'
+  return ''
+}
+
+export function formatRetrievalScore(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(4) : '—'
+}

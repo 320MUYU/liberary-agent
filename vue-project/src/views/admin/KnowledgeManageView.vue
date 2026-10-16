@@ -1,11 +1,13 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import KnowledgeSearchPanel from '@/components/KnowledgeSearchPanel.vue'
 
 import {
   deleteKnowledgeDocumentApi,
   disableKnowledgeDocumentApi,
   getKnowledgeDocumentsApi,
+  getKnowledgeIndexStatusApi,
   publishKnowledgeDocumentApi,
   retryKnowledgeVersionApi,
   uploadKnowledgeDocumentApi,
@@ -30,6 +32,7 @@ const keyword = ref('')
 const statusFilter = ref('')
 const busyKey = ref('')
 const uploading = ref(false)
+const audits = reactive({})
 const isBusy = computed(() => Boolean(busyKey.value) || uploading.value)
 let pollTimer
 let active = true
@@ -64,6 +67,7 @@ async function fetchDocuments(quiet = false) {
     const data = await getKnowledgeDocumentsApi()
     if (!active) return
     documents.value = data
+    for (const key of Object.keys(audits)) delete audits[key]
     loadFailed.value = false
     succeeded = true
   } catch {
@@ -111,6 +115,19 @@ function disable(document) {
 
 function retry(version) {
   runAction(`retry-${version.id}`, () => retryKnowledgeVersionApi(version.id), '已重新加入处理队列')
+}
+
+async function auditVersion(version) {
+  if (isBusy.value) return
+  busyKey.value = `audit-${version.id}`
+  try {
+    const data = await getKnowledgeIndexStatusApi(version.id)
+    if (active) audits[version.id] = data
+  } catch {
+    // 保留已有文档，统一请求拦截器展示核验失败原因。
+  } finally {
+    busyKey.value = ''
+  }
 }
 
 async function remove(document) {
@@ -228,11 +245,13 @@ onUnmounted(() => {
 
     <el-alert
       title="仅上传适合公开查阅的资料"
-      description="文档内容将发送至云端计算向量，命中的片段会用于 AI 回答。请勿上传个人资料、内部文件或密钥。新版本处理完成后需手动发布，期间已发布版本继续可用。"
+      description="文档内容将发送至云端计算向量，候选片段可能用于模型重排和 AI 回答。请勿上传个人资料、内部文件或密钥。新版本处理完成后需手动发布，期间已发布版本继续可用。"
       type="info"
       :closable="false"
       show-icon
     />
+
+    <KnowledgeSearchPanel />
 
     <section class="toolbar surface">
       <el-input v-model="keyword" clearable placeholder="搜索文档标题" aria-label="搜索文档标题" />
@@ -293,8 +312,42 @@ onUnmounted(() => {
                   <p v-if="version.status === 'failed'" class="version-error">
                     {{ safeKnowledgeError(version.error_message) }}
                   </p>
+                  <div v-if="audits[version.id]" class="index-audit">
+                    <el-tag
+                      :type="audits[version.id].status === 'consistent' ? 'success' : 'warning'"
+                      size="small"
+                    >
+                      {{
+                        {
+                          consistent: '入库核验一致',
+                          mismatch: '入库记录不一致',
+                          in_progress: '处理中，稍后再核验'
+                        }[audits[version.id].status]
+                      }}
+                    </el-tag>
+                    <p>
+                      正文 {{ audits[version.id].sql_count }} 段 · Chroma
+                      {{ audits[version.id].vector_count }} 条 · 缺少
+                      {{ audits[version.id].missing_count }} 条 · 多余
+                      {{ audits[version.id].extra_count }} 条
+                    </p>
+                    <small>向量集合：{{ audits[version.id].collection }}</small>
+                    <p v-if="!audits[version.id].profile_matches_current" class="version-error">
+                      此版本使用旧向量模型配置，当前问答不会检索它，请上传新版本重新索引。
+                    </p>
+                    <p v-if="audits[version.id].status === 'mismatch'" class="version-error">
+                      请检查索引服务。失败版本可重新处理；就绪版本可上传新版本重建。
+                    </p>
+                  </div>
                 </div>
                 <div class="version-actions">
+                  <el-button
+                    size="small"
+                    :disabled="isBusy"
+                    :loading="busyKey === `audit-${version.id}`"
+                    @click="auditVersion(version)"
+                    >核验入库</el-button
+                  >
                   <el-button
                     v-if="canRetryVersion(version)"
                     size="small"
@@ -441,6 +494,14 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.index-audit {
+  margin-top: 10px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.index-audit p {
+  margin: 6px 0;
+}
 .knowledge-page {
   display: flex;
   flex-direction: column;

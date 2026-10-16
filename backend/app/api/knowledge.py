@@ -7,11 +7,23 @@ from app.common.response import Response
 from app.database import get_db
 from app.dependencies.auth import get_current_admin, get_current_user
 from app.models.users import User
-from app.schemas.knowledge import DocumentResponse, TitleRequest, VersionResponse
-from app.services import knowledge_service
+from app.schemas.knowledge import (
+    DocumentResponse, TitleRequest, VersionResponse, SearchRequest, SearchResponse, IndexStatusResponse,
+)
+from app.services import knowledge_service, knowledge_diagnostics
 
 
 router = APIRouter(tags=["知识库接口"])
+
+
+@router.post("/admin/knowledge/search")
+def search_knowledge(data: SearchRequest, _: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return Response.success(data=SearchResponse.model_validate(knowledge_diagnostics.search(db, data)))
+
+
+@router.get("/admin/knowledge/versions/{version_id}/index-status")
+def index_status(version_id: int = Path(ge=1), _: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return Response.success(data=IndexStatusResponse.model_validate(knowledge_diagnostics.index_status(db, version_id)))
 
 
 def _validate_title(title: str, *, allow_blank: bool = False) -> str:

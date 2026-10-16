@@ -2,6 +2,18 @@ import request from '../request.js'
 
 const base = '/api/admin/knowledge'
 
+export function searchKnowledgeApi(data) {
+  return request({ url: `${base}/search`, method: 'post', data, timeout: 65000 })
+}
+
+export function getKnowledgeIndexStatusApi(versionId) {
+  return request({
+    url: `${base}/versions/${versionId}/index-status`,
+    method: 'get',
+    timeout: 65000
+  })
+}
+
 function uploadData({ title = '', file }) {
   const data = new FormData()
   data.append('title', title.trim())

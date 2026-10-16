@@ -55,6 +55,26 @@ def document():
 
 
 class KnowledgeApiTest(unittest.TestCase):
+    @patch("app.api.knowledge.knowledge_diagnostics.search")
+    def test_admin_search_validates_query_and_forwards_strategy(self, search):
+        search.return_value = {"results": [], "candidates": [], "rerank_status": "disabled", "strategy": "hybrid", "timings_ms": {}}
+        client = create_test_client("admin")
+        response = client.post("/api/admin/knowledge/search", json={"query": "  R-204  ", "strategy": "hybrid"})
+        self.assertEqual(response.json()["code"], 200)
+        self.assertEqual(search.call_args.args[1].query, "R-204")
+        for payload in ({"query": " "}, {"query": "x", "limit": 101},
+                        {"query": "x", "strategy": "unsafe"}, {"query": "x" * 1001}):
+            self.assertEqual(client.post("/api/admin/knowledge/search", json=payload).status_code, 422)
+
+    @patch("app.api.knowledge.knowledge_diagnostics.index_status")
+    def test_admin_can_audit_a_version(self, audit):
+        audit.return_value = {"status": "consistent", "sql_count": 2, "vector_count": 2, "recorded_count": 2,
+                              "version_id": 2, "store": "Chroma", "collection": "test-collection",
+                              "missing_count": 0, "extra_count": 0, "profile_matches_current": True}
+        response = create_test_client("admin").get("/api/admin/knowledge/versions/2/index-status")
+        self.assertEqual(response.json()["data"]["status"], "consistent")
+        audit.assert_called_once_with("test-session", 2)
+
     def test_all_admin_operations_require_admin_role(self):
         operations = (
             ("GET", "/documents", {}),
@@ -72,6 +92,8 @@ class KnowledgeApiTest(unittest.TestCase):
             ("POST", "/documents/1/disable", {}),
             ("POST", "/versions/2/retry", {}),
             ("DELETE", "/documents/1", {}),
+            ("POST", "/search", {"json": {"query": "开放时间"}}),
+            ("GET", "/versions/2/index-status", {}),
         )
         for role, expected_status in ((None, 401), ("student", 403)):
             client = create_test_client(role)
