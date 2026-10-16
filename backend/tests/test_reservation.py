@@ -1,5 +1,5 @@
 import unittest
-from datetime import date, timedelta
+from datetime import date, timedelta, time
 
 from pydantic import ValidationError
 
@@ -14,7 +14,7 @@ from app.database import Base
 from app.models.labs import Lab
 from app.models.reservations import Reservation
 from app.models.users import User
-from app.schemas.reservation import ReservationCreateRequest, ReservationReviewRequest
+from app.schemas.reservation import ReservationCreateRequest, ReservationReviewRequest, ReservationResponse
 
 
 class ReservationFlowTest(unittest.TestCase):
@@ -148,6 +148,12 @@ class ReservationFlowTest(unittest.TestCase):
         with self.assertRaises(BusinessException) as too_late_to_cancel:
             cancel_reservation(approved.id, self.student, self.db)
         self.assertIn("2 小时内", too_late_to_cancel.exception.message)
+
+    def test_legacy_mysql_time_values_are_serialized_without_changing_storage(self):
+        created = create_reservation(self.request(), self.student, self.db).data.model_dump()
+        response = ReservationResponse.model_validate({**created,
+            "start": timedelta(hours=14), "end": time(16, 0)})
+        self.assertEqual((response.start,response.end),("14:00","16:00"))
 
 
 if __name__ == "__main__":

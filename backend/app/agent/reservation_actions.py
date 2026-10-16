@@ -57,8 +57,9 @@ def prepare_reservation(db, user_id, run_id, space_id, conditions):
     return result
 
 
-def receipt(db, user_id, reservation_id):
-    reservation = db.query(Reservation).filter_by(id=reservation_id, applicant_id=user_id).populate_existing().first()
+def receipt(db, user_id, reservation_id, *, locked=False):
+    query = db.query(Reservation).filter_by(id=reservation_id, applicant_id=user_id).populate_existing()
+    reservation = (query.with_for_update() if locked else query).first()
     if reservation is None:
         raise BusinessException("预约不存在", 404)
     data = reservation_response(reservation).model_dump(mode="json", exclude={"applicant_id", "applicant_name"})
@@ -79,7 +80,7 @@ def decide_reservation(db, user_id, action_id, confirmed):
         if action.status == "completed":
             if not confirmed:
                 raise BusinessException("预约已提交，请到我的预约中处理", 409)
-            return receipt(db, user_id, action.reservation_id)
+            return receipt(db, user_id, action.reservation_id, locked=True)
         if action.status == "cancelled":
             if confirmed:
                 raise BusinessException("操作已取消，请重新查询", 409)
@@ -93,19 +94,11 @@ def decide_reservation(db, user_id, action_id, confirmed):
         if room_snapshot(lab) != action.snapshot:
             raise BusinessException("空间信息已变化，请重新查询并确认", 409)
         data = ReservationCreateRequest(lab_id=lab.id, **action.conditions)
-        # The applicant lock also serializes applications from other tasks/pages.
-        existing = db.query(Reservation).filter_by(applicant_id=user_id, lab_id=lab.id,
-            date=data.date, start=data.start, end=data.end).filter(
-                Reservation.status.in_(("pending", "approved"))).populate_existing().with_for_update().first()
-        if existing:
-            if (existing.people, existing.purpose, existing.note) != (data.people, data.purpose, data.note):
-                raise BusinessException("已有同一时段的预约但内容不同，请查看我的预约", 409)
-            reservation = existing
-        else:
-            reservation = reservation_service.create_reservation_in_transaction(db, user, data)
+        # Pages and Agent tasks share the same locked deduplication and validation.
+        reservation = reservation_service.create_reservation_in_transaction(db, user, data)
         action.reservation_id = reservation.id
         action.status = "completed"
         db.flush()
         db.refresh(reservation, with_for_update=True)
-        result = receipt(db, user_id, reservation.id)
+        result = receipt(db, user_id, reservation.id, locked=True)
     return result

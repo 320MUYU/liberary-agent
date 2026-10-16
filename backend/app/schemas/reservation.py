@@ -1,10 +1,22 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, time
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 TIME_PATTERN = r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+
+
+def reservation_time(value):
+    """Old MySQL TIME columns use timedelta; current schemas store HH:MM strings."""
+    if isinstance(value, timedelta):
+        seconds = value.total_seconds()
+        if not 0 <= seconds < 86400:
+            raise ValueError("预约时间必须在同一天内")
+        value = (datetime.min + value).time()
+    if isinstance(value, time):
+        return value.isoformat(timespec="minutes" if not value.second and not value.microsecond else "seconds")
+    return value
 
 
 class ReservationCreateRequest(BaseModel):
@@ -62,6 +74,11 @@ class ReservationResponse(BaseModel):
     review_note: str | None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("start", "end", mode="before")
+    @classmethod
+    def legacy_time(cls, value):
+        return reservation_time(value)
 
 
 class ReservationPageResponse(BaseModel):

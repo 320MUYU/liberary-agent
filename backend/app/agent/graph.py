@@ -108,8 +108,10 @@ def build_graph(checkpointer, model_call, read_tool, prepare=None, execute=None,
         if "space_page" not in state:
             return {"status": "no_results", "message": "未能完成空间查询，请重新查询。"}
         value = interrupt({"kind": "select_space", **state["space_page"]})
+        # Availability can change after this checkpoint; runtime and preparation
+        # validate the current slot before advancing to confirmation.
         if not isinstance(value, dict) or type(value.get("space_id")) is not int or value["space_id"] not in {
-                room["id"] for room in state.get("spaces", []) if room["can_reserve"]}:
+                room["id"] for room in state.get("spaces", [])}:
             raise ValueError("请选择本页可申请的空间")
         return {"selected_space_id": value["space_id"], "status": "selected"}
 

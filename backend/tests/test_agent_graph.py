@@ -10,6 +10,19 @@ from app.agent.graph import build_graph
 
 
 class AgentGraphTest(unittest.TestCase):
+    def test_space_query_is_bounded_and_does_not_prepare_without_selection(self):
+        conditions={"date":"2030-01-01","start":"14:00","end":"16:00","people":3,"purpose":"讨论"}
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            graph=build_graph(saver,lambda _:AIMessage(content="已预约",tool_calls=[{"id":"s","name":"search_spaces","args":{}}]),
+                lambda *_:{"ok":True,"data":{"spaces":[],"conditions":conditions,"total":0,"page":1,"page_size":6}},
+                prepare=lambda *_:self.fail(),prepare_reservation=lambda *_:self.fail(),execute=lambda *_:self.fail())
+            result=graph.invoke({"query":"找空间","task_type":"reservation","conditions":conditions},
+                {"configurable":{"thread_id":"space-budget"}})
+            self.assertEqual(result['model_calls'],4)
+            self.assertLessEqual(result['tool_calls'],8)
+            self.assertEqual(result['__interrupt__'][0].value['kind'],'select_space')
+            self.assertNotIn('action',result)
+
     def test_personal_tool_loop_obeys_budget_and_does_not_execute_writes(self):
         with SqliteSaver.from_conn_string(":memory:") as saver:
             graph = build_graph(saver, lambda _: AIMessage(content="", tool_calls=[{

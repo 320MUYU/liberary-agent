@@ -1,0 +1,9 @@
+[
+  {"name":"空闲空间", "status":"available", "capacity":5, "can_reserve":true},
+  {"name":"维护空间", "status":"maintenance", "capacity":5, "can_reserve":false, "reason":"maintenance"},
+  {"name":"容量不足", "status":"available", "capacity":2, "can_reserve":false, "reason":"capacity"},
+  {"name":"当前使用中不等于未来冲突", "status":"busy", "capacity":5, "can_reserve":true},
+  {"name":"已通过占用", "status":"available", "capacity":5, "booking":"approved", "start":"14:00", "end":"16:00", "can_reserve":false, "reason":"approved_conflict"},
+  {"name":"待审核不锁时段", "status":"available", "capacity":5, "booking":"pending", "start":"14:00", "end":"16:00", "can_reserve":true},
+  {"name":"相邻时段无重叠", "status":"available", "capacity":5, "booking":"approved", "start":"12:00", "end":"14:00", "can_reserve":true}
+]

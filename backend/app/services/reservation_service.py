@@ -16,7 +16,7 @@ from app.common.exceptions import BusinessException
 from app.models.labs import Lab
 from app.models.reservations import Reservation
 from app.models.users import User
-from app.schemas.reservation import ReservationCreateRequest, ReservationReviewRequest
+from app.schemas.reservation import ReservationCreateRequest, ReservationReviewRequest, reservation_time
 
 
 def approved_conflict(
@@ -85,6 +85,13 @@ def create_reservation_in_transaction(
     if reader is None or reader.status != 1:
         raise BusinessException("账号不可用", 403)
     lab = lock_space(db, data.lab_id)
+    existing = db.query(Reservation).filter_by(applicant_id=reader.id, lab_id=lab.id,
+        date=data.date, start=data.start, end=data.end).filter(
+            Reservation.status.in_(("pending", "approved"))).populate_existing().with_for_update().first()
+    if existing:
+        if (existing.people, existing.purpose, existing.note) != (data.people, data.purpose, data.note):
+            raise BusinessException("已有同一时段的预约但内容不同，请查看我的预约", 409)
+        return existing
     validate_reservation(db, lab, data)
 
     reservation = Reservation(
@@ -150,7 +157,7 @@ def cancel_reservation(
     if reservation.status not in ("pending", "approved"):
         raise BusinessException(code=409, message="当前状态不能取消预约")
     starts_at = datetime.combine(
-        reservation.date, datetime.strptime(reservation.start, "%H:%M").time()
+        reservation.date, time_from_reservation(reservation.start)
     )
     if starts_at < datetime.now() + timedelta(hours=2):
         raise BusinessException(code=409, message="预约开始前 2 小时内不能取消")
@@ -213,7 +220,7 @@ def review_reservation(
         raise BusinessException(code=409, message="该预约已处理，不能重复审核")
     if data.status == "approved":
         now = datetime.now()
-        if (reservation.date, reservation.start) <= (now.date(), now.strftime("%H:%M")):
+        if datetime.combine(reservation.date, time_from_reservation(reservation.start)) <= now:
             raise BusinessException(code=409, message="预约时间已过，不能通过")
         if lab.status == "maintenance":
             raise BusinessException(code=409, message="学习空间维护中，不能通过预约")
@@ -236,3 +243,8 @@ def review_reservation(
     db.commit()
     db.refresh(reservation)
     return reservation
+
+
+def time_from_reservation(value):
+    value = reservation_time(value)
+    return datetime.strptime(value, "%H:%M:%S" if len(value) > 5 else "%H:%M").time()

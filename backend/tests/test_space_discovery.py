@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+import json
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -88,3 +90,21 @@ class SpaceDiscoveryTest(unittest.TestCase):
         with self.assertRaises(BusinessException):
             reservation_service.create_reservation(self.db, self.student, self.request())
         self.assertFalse(self.db.in_transaction())
+
+    def test_fixed_slot_cases_match_the_same_business_rules(self):
+        cases=json.loads((Path(__file__).parent/'fixtures/space_reservations.json').read_text(encoding='utf-8'))
+        for case in cases:
+            with self.subTest(case=case['name']):
+                self.db.query(Reservation).delete(synchronize_session="fetch")
+                self.lab.status='available';self.lab.capacity=5
+                self.db.commit()
+                if case.get('booking'):
+                    row=reservation_service.create_reservation(self.db,self.other,self.request(start=case['start'],end=case['end']))
+                    if case['booking']=='approved':
+                        reservation_service.review_reservation(self.db,self.admin,row.id,ReservationReviewRequest(status='approved'))
+                self.lab.status=case['status'];self.lab.capacity=case['capacity']
+                self.db.commit()
+                room=get_space(self.db,self.conditions(),self.lab.id)['spaces'][0]
+                self.assertEqual(room['can_reserve'],case['can_reserve'])
+                if case.get('reason'):
+                    self.assertIn(case['reason'],room['unavailable_reasons'])

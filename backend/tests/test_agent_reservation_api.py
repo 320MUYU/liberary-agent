@@ -109,3 +109,14 @@ class AgentReservationApiTest(unittest.TestCase):
         self.assertEqual(self.request("GET",path,role="reader")["spaces"],page["spaces"])
         selected=self.request("POST",path+"/select-space",role="reader",json={"space_id":page["spaces"][0]["id"]})
         self.assertEqual(selected["status"],"confirm_reservation")
+
+    def test_maintenance_recovery_can_be_selected_after_refresh(self):
+        self.setup_space()
+        fields={key:self.space[key] for key in ("name","code","building","floor","capacity","category")}
+        self.request("PUT",f"/admin/lab/{self.space['id']}",json={**fields,"status":"maintenance"})
+        run=self.start();path="/agent/runs/"+run['run_id']
+        self.assertFalse(run['spaces'][0]['can_reserve'])
+        self.request("PUT",f"/admin/lab/{self.space['id']}",json={**fields,"status":"available"})
+        self.assertTrue(self.request("GET",path,role="reader")['spaces'][0]['can_reserve'])
+        selected=self.request("POST",path+"/select-space",role="reader",json={"space_id":self.space['id']})
+        self.assertEqual(selected['status'],'confirm_reservation')

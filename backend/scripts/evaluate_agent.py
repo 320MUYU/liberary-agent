@@ -1,4 +1,4 @@
-"""Offline borrowing-agent harness. Uses isolated fixtures and fake model decisions.
+"""Offline library-agent harness. Uses isolated fixtures and fake model decisions.
 
 Default mode makes no cloud calls or live business writes. --live-discovery
 reads the real catalogue and calls configured embedding/rerank services, without
@@ -32,8 +32,10 @@ def main(argv=None):
     logging.disable(logging.CRITICAL)
     modules = ["tests.test_agent_" + name for name in (
         "tools", "graph", "actions", "api", "mcp", "discovery", "return_actions",
-        "schema_upgrade", "return_api", "return_mcp")]
-    modules.append("tests.test_book_discovery")
+        "schema_upgrade", "return_api", "return_mcp", "reservation_actions",
+        "reservation_api", "reservation_mcp", "reservation_schema")]
+    modules.extend(["tests.test_book_discovery", "tests.test_space_discovery",
+        "tests.test_space_schema_upgrade.SpaceSchemaUpgradePlanTest"])
     output = io.StringIO()
     started = time.monotonic()
     result = unittest.TextTestRunner(stream=output, verbosity=2).run(
@@ -49,7 +51,10 @@ def main(argv=None):
             "edition source ownership", "publication changes", "live inventory refresh", "retrieval degradation",
             "personal loan isolation", "loan pagination and selection", "six fixed return statuses",
             "return snapshot binding", "return rollback and lost response recovery",
-            "return capability isolation", "admin confirmation inventory release", "additive schema upgrade"]}
+            "return capability isolation", "admin confirmation inventory release", "additive schema upgrade",
+            "seven fixed space slots", "immutable explicit reservation conditions", "space pagination",
+            "live slot refresh", "maintenance recovery", "reservation confirmation and cancellation",
+            "reservation rollback and replay", "reservation capability isolation", "legacy schema preview"]}
     encoded = json.dumps(report, ensure_ascii=False, indent=2)
     if args.output:
         args.output.write_text(encoded + "\n", encoding="utf-8")
