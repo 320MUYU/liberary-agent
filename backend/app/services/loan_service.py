@@ -190,12 +190,19 @@ def reject_loan(
     return loan
 
 
+def request_return_in_transaction(db: Session, current_user: User, loan_id: int) -> Loan:
+    """Caller owns commit/rollback so Agent receipt and return change are atomic."""
+    _, _, loan = _lock_loan(db, loan_id, current_user.id)
+    _require_status(loan, "borrowed")
+    loan.status = "return_pending"
+    loan.return_requested_at = datetime.now()
+    db.flush()
+    return loan
+
+
 def request_return(db: Session, current_user: User, loan_id: int) -> Loan:
     with _write_transaction(db):
-        _, _, loan = _lock_loan(db, loan_id, current_user.id)
-        _require_status(loan, "borrowed")
-        loan.status = "return_pending"
-        loan.return_requested_at = datetime.now()
+        loan = request_return_in_transaction(db, current_user, loan_id)
     db.refresh(loan)
     return loan
 
