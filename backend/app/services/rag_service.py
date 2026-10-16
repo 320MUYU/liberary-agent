@@ -17,6 +17,7 @@ from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeVer
 from app.schemas.ai import ChatRequest, ChatResponse, ChatSource
 from app.services.embedding_service import create_embeddings, get_embedding_profile
 from app.services.vector_store import ChromaVectorStore
+from app.services.rag_retrieval import retrieve
 
 
 NO_MATCH = "知识库暂无足够依据回答这个问题，请查看已发布的馆规或联系管理员确认。"
@@ -123,8 +124,10 @@ def _evidence(rows: list[dict], published: dict) -> tuple[list[ChatSource], str]
         identifier, distance = row.get("id"), row.get("distance")
         if (
             identifier in seen or identifier not in published
-            or isinstance(distance, bool) or not isinstance(distance, Real)
-            or not math.isfinite(distance) or distance < 0 or distance > threshold
+            or (not row.get("eligible") and (
+                isinstance(distance, bool) or not isinstance(distance, Real)
+                or not math.isfinite(distance) or distance < 0 or distance > threshold
+            ))
         ):
             continue
         chunk, version, document = published[identifier]
@@ -185,15 +188,17 @@ def knowledge_chat(
                 timeout=min(getattr(settings, "EMBEDDING_TIMEOUT_SECONDS", 15), _remaining(deadline)),
                 max_retries=0,
             )
-        _remaining(deadline)
-        embedding = embeddings.embed_query(query)
-        _remaining(deadline)
         store = vector_store if vector_store is not None else ChromaVectorStore(
             timeout=min(getattr(settings, "CHROMA_TIMEOUT_SECONDS", 10), _remaining(deadline) / 3)
         )
-        rows = store.query(profile["collection_name"], embedding, limit=getattr(settings, "RAG_CANDIDATES", 8),
-                           version_ids=published_version_ids(db, profile["fingerprint"]))
+        queries = [query]
+        if getattr(settings, "RAG_RETRIEVAL_MODE", "vector") == "hybrid":
+            queries = [data.messages[-1].content[:getattr(settings, "RAG_QUERY_CHARS", 1000)], query]
+        retrieval = retrieve(db, queries, profile, config=settings, embeddings=embeddings,
+                             store=store, deadline=deadline)
+        rows = retrieval.rows
         _remaining(deadline)
+        db.rollback()
         identifiers = [row["id"] for row in rows if isinstance(row.get("id"), str)]
         published = _published_chunks(db, identifiers, profile["fingerprint"])
         sources, context = _evidence(rows, published)

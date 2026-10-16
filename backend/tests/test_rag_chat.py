@@ -228,6 +228,7 @@ class RagChatTest(unittest.TestCase):
         self.assertIn("暂无足够依据", response.content)
 
     def test_vector_and_embedding_failures_remain_service_errors(self):
+        self.add_source()
         for store, embeddings in [
             (FakeStore(error=RuntimeError("private network address")), FakeEmbeddings()),
             (FakeStore(), FakeEmbeddings(error=RuntimeError("private key"))),

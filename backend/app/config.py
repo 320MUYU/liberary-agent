@@ -43,7 +43,12 @@ class Settings(BaseSettings):
     KNOWLEDGE_MAX_PAGES: int = Field(default=200, gt=0)
     RAG_CHUNK_SIZE: int = Field(default=800, ge=100, le=2000)
     RAG_CHUNK_OVERLAP: int = Field(default=100, ge=0)
-    RAG_CANDIDATES: int = Field(default=8, ge=1, le=100)
+    RAG_RETRIEVAL_MODE: Literal["vector", "hybrid"] = "hybrid"
+    RAG_CANDIDATES: int = Field(default=20, ge=1, le=100)
+    RAG_LEXICAL_CANDIDATES: int = Field(default=20, ge=1, le=100)
+    RAG_FUSION_CANDIDATES: int = Field(default=30, ge=1, le=100)
+    RAG_RRF_K: int = Field(default=60, ge=1, le=1000)
+    RAG_LEXICAL_MIN_COVERAGE: float = Field(default=0.35, ge=0, le=1)
     RAG_TOP_K: int = Field(default=4, ge=1, le=10)
     RAG_MAX_DISTANCE: float = Field(default=0.6, ge=0, le=2)
     RAG_CONTEXT_CHARS: int = Field(default=6000, ge=800, le=12000)
