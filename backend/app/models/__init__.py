@@ -9,6 +9,7 @@ Base.metadata，create_all 也就不会建它的表。所以在包的 __init__ �
 都被导入过，SQLAlchemy 才解析得出关系——这也是要在这里统一导出的原因。
 """
 
+from app.models.agent import AgentAction, AgentRun
 from app.models.book_copies import BookCopy
 from app.models.books import Book
 from app.models.equipments import Equipment
@@ -24,6 +25,8 @@ from app.models.reservations import Reservation
 from app.models.users import User
 
 __all__ = [
+    "AgentAction",
+    "AgentRun",
     "Book",
     "BookCopy",
     "Equipment",

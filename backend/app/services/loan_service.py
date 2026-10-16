@@ -103,25 +103,32 @@ def _require_status(loan: Loan, expected: str):
         raise BusinessException("当前借阅状态不允许此操作，请刷新后重试", 409)
 
 
+def create_loan_in_transaction(db: Session, current_user: User, book_id: int) -> Loan:
+    """Caller owns commit/rollback, allowing an action receipt to commit atomically."""
+    reader = _lock_reader(db, current_user.id)
+    if reader.status != 1:
+        raise BusinessException("读者账号已停用", 409)
+    book = _lock_book(db, book_id)
+    if not book.is_active:
+        raise BusinessException("图书不存在或已下架", 404)
+    duplicate = (
+        db.query(Loan.id).filter(
+            Loan.reader_id == reader.id, Loan.open_book_id == book.id
+        ).with_for_update().first()
+    )
+    if duplicate:
+        raise BusinessException("已有该图书的未完成借阅，请勿重复申请", 409)
+    if _available_copy(db, book.id) is None:
+        raise BusinessException("该图书暂无可借副本", 409)
+    loan = Loan(book_id=book.id, reader_id=reader.id, status="pending", open_book_id=book.id)
+    db.add(loan)
+    db.flush()
+    return loan
+
+
 def create_loan(db: Session, current_user: User, data: LoanRequest) -> Loan:
     with _write_transaction(db):
-        reader = _lock_reader(db, current_user.id)
-        if reader.status != 1:
-            raise BusinessException("读者账号已停用", 409)
-        book = _lock_book(db, data.book_id)
-        if not book.is_active:
-            raise BusinessException("图书不存在或已下架", 404)
-        duplicate = (
-            db.query(Loan.id).filter(
-                Loan.reader_id == reader.id, Loan.open_book_id == book.id
-            ).with_for_update().first()
-        )
-        if duplicate:
-            raise BusinessException("已有该图书的未完成借阅，请勿重复申请", 409)
-        if _available_copy(db, book.id) is None:
-            raise BusinessException("该图书暂无可借副本", 409)
-        loan = Loan(book_id=book.id, reader_id=reader.id, status="pending", open_book_id=book.id)
-        db.add(loan)
+        loan = create_loan_in_transaction(db, current_user, data.book_id)
     db.refresh(loan)
     return loan
 
