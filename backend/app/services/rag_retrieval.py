@@ -188,7 +188,7 @@ def retrieve(db, queries, profile, *, config, embeddings, store, deadline, reran
             for ranked in ranking:
                 row = result.candidates[ranked["index"]]
                 row["rerank_score"] = ranked["score"]
-                if ranked["score"] >= getattr(config, "RERANK_MIN_SCORE", 0.15):
+                if ranked["score"] >= getattr(config, "RERANK_MIN_SCORE", 0.0):
                     result.rows.append({**row, "eligible": True})
             result.rerank_status = "applied"
         except BusinessException:

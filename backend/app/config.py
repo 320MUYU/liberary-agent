@@ -54,7 +54,9 @@ class Settings(BaseSettings):
     RERANK_BASE_URL: str = "https://api.siliconflow.cn/v1"
     RERANK_MODEL: str = "BAAI/bge-reranker-v2-m3"
     RERANK_TIMEOUT_SECONDS: float = Field(default=8.0, gt=0, le=30)
-    RERANK_MIN_SCORE: float = Field(default=0.15, ge=0, le=1)
+    # Reranker scores are not calibrated answer probabilities. Use ranking only
+    # until a rejection threshold has been validated on the real library corpus.
+    RERANK_MIN_SCORE: float = Field(default=0.0, ge=0, le=1)
     RAG_TOP_K: int = Field(default=4, ge=1, le=10)
     RAG_NEIGHBOR_CHUNKS: int = Field(default=1, ge=0, le=2)
     RAG_MAX_DISTANCE: float = Field(default=0.6, ge=0, le=2)

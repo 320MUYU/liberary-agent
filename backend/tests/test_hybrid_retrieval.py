@@ -102,12 +102,21 @@ class HybridRetrievalTest(unittest.TestCase):
                 self.assertLessEqual(timeout, 8)
                 return sorted([{"index": i, "score": 0.9 if "取消" in text else 0.02}
                                for i, text in enumerate(documents)], key=lambda row: -row["score"])
-        result = retrieve(self.db, ["取消研讨室"], PROFILE, config=CONFIG, embeddings=FakeEmbeddings(),
+        config = SimpleNamespace(**{**vars(CONFIG), "RERANK_MIN_SCORE": 0.15})
+        result = retrieve(self.db, ["取消研讨室"], PROFILE, config=config, embeddings=FakeEmbeddings(),
                           store=FakeStore([{"id": first.vector_id, "distance": 0.1},
                                            {"id": second.vector_id, "distance": 0.8}]),
                           deadline=time.monotonic() + 30, reranker=Reranker(), strategy="hybrid_rerank")
         self.assertEqual(result.rerank_status, "applied")
         self.assertEqual([row["id"] for row in result.rows], [second.vector_id])
+
+    def test_default_rerank_retains_low_scored_relevant_evidence(self):
+        _, _, chunk = self.add_source("周一至周五21:30闭馆。")
+        ranker = SimpleNamespace(rank=lambda *args, **kwargs: [{"index": 0, "score": 0.07}])
+        result = retrieve(self.db, ["工作日几点关门？"], PROFILE, config=CONFIG,
+                          embeddings=FakeEmbeddings(), store=FakeStore([{"id": chunk.vector_id, "distance": 0.2}]),
+                          deadline=time.monotonic() + 30, reranker=ranker, strategy="hybrid_rerank")
+        self.assertEqual([row["id"] for row in result.rows], [chunk.vector_id])
 
     def test_rerank_failure_keeps_filtered_fusion_and_records_degradation(self):
         _, _, chunk = self.add_source()
