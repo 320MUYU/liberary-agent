@@ -12,6 +12,7 @@ Base.metadata，create_all 也就不会建它的表。所以在包的 __init__ �
 from app.models.agent import AgentAction, AgentRun
 from app.models.book_copies import BookCopy
 from app.models.books import Book
+from app.models.book_sources import BookSource
 from app.models.equipments import Equipment
 from app.models.labs import Lab
 from app.models.loans import Loan
@@ -28,6 +29,7 @@ __all__ = [
     "AgentAction",
     "AgentRun",
     "Book",
+    "BookSource",
     "BookCopy",
     "Equipment",
     "Lab",
