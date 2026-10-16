@@ -27,6 +27,23 @@
 其中 `source_id` 必须是 Open Library 的 `/books/OL…M` 版次编号；`category` 为 `AI / Agent`、`儿童图书`、`历史图书`。
 运行数据存于 Git 忽略的 `backend/data/catalogue-import/`，不含账号密码或模型密钥。
 
+## 同步知识库
+
+先启动 Chroma、索引 worker，并在本地配置中启用 RAG。每本书对应一份以真实书名命名的知识文档：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/import_catalogue.py data/catalogue-import/reviewed.json --apply --sync-knowledge
+# 等待 worker 索引完成，再运行；只会发布 ready 版本
+.\.venv\Scripts\python.exe scripts/import_catalogue.py data/catalogue-import/reviewed.json --apply --sync-knowledge --publish
+# 失败版本可在排查原因后显式重试
+.\.venv\Scripts\python.exe scripts/import_catalogue.py data/catalogue-import/reviewed.json --apply --sync-knowledge --retry-failed
+```
+
+CLI 返回每本书的书目、文档和版本编号及状态。中断后重跑同一文件可继续；不自动轮询、不把 queued 当成 published。
+新版本索引完成前保留旧发布版本。相同内容不创建重复版本；被管理员删除的文档不会自动重新创建。
+管理员修改书目信息后可重跑同步；下架书目同步时会停用其关联文档。元数据文档不保存库存快照，实时库存仍由图书接口计算。
+同步入口是本机管理员维护工具，不对读者暴露，不要求输入或保存管理员密码。
+
 ## 获取数据
 
 针对读者明确提出的主题进行有限查询并缓存结果，先人工筛选，再转换、校验、导入。API 没有返回的字段不由语言模型填补。
