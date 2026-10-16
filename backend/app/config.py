@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     DEEPSEEK_MODEL: str = "deepseek-chat"
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_TIMEOUT_SECONDS: float = 60.0
+    AGENT_CHECKPOINT_PATH: Path = BASE_DIR / "data" / "agent" / "checkpoints.sqlite"
+    AGENT_TOOL_TRANSPORT: Literal["local", "mcp"] = "local"
+    AGENT_MCP_URL: str = "http://127.0.0.1:8002/mcp"
     RAG_ENABLED: bool = False
     EMBEDDING_PROVIDER: Literal["dashscope", "openai-compatible"] = "dashscope"
     EMBEDDING_BASE_URL: str = ""
