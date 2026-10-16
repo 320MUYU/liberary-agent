@@ -56,6 +56,9 @@ class FlowStore:
             if row["metadata"]["version_id"] != str(version_id)
         }
 
+    def version_vector_ids(self, collection, version_id):
+        return {key for key, value in self.rows.items() if value["metadata"]["version_id"] == str(version_id)}
+
 
 class KnowledgeFlowTest(unittest.TestCase):
     def setUp(self):

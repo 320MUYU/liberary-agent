@@ -134,12 +134,16 @@ def process_next_job(db: Session, *, embeddings=None, store=None) -> bool:
                     return True
                 store.upsert(version.collection_name, [chunk.vector_id for chunk in batch],
                              [chunk.text for chunk in batch], vectors,
-                             [{"version_id": str(version.id), "chunk_id": str(chunk.id)} for chunk in batch])
+                             [{"version_id": str(version.id), "chunk_id": str(chunk.id),
+                               "document_id": str(version.document_id), "chunk_index": chunk.chunk_index}
+                              for chunk in batch])
             if not _renew(db, identifier, token):
                 return True
             if db.get(KnowledgeDocument, version.document_id).status == "deleted":
                 store.delete_version(version.collection_name, version.id)
             else:
+                if store.version_vector_ids(version.collection_name, version.id) != {chunk.vector_id for chunk in chunks}:
+                    raise ValueError("vector inventory mismatch")
                 completed_chunks = len(chunks)
         else:
             # A crashed old worker may have written after a concurrent delete job.

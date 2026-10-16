@@ -40,8 +40,20 @@ class FakeStore:
     def delete_version(self, collection, version_id):
         self.data = {key: value for key, value in self.data.items() if value["version_id"] != str(version_id)}
 
+    def version_vector_ids(self, collection, version_id):
+        return {key for key, value in self.data.items() if value["version_id"] == str(version_id)}
+
 
 class KnowledgeServiceTest(unittest.TestCase):
+    def test_missing_vector_write_cannot_mark_index_ready(self):
+        doc = self.upload()
+        self.store.upsert = lambda *args: None
+        self.work()
+        version = self.db.get(KnowledgeVersion, doc.latest_version_id)
+        self.assertEqual(version.status, "failed")
+        with self.assertRaises(BusinessException):
+            publish_document(self.db, doc.id)
+
     def setUp(self):
         self.engine = create_engine("sqlite://")
         Base.metadata.create_all(self.engine)

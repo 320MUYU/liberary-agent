@@ -94,6 +94,9 @@ class NativeChromaCollection:
     def delete(self, **data):
         return self.client._request("POST", f"{self.path}/delete", data)
 
+    def get(self, **data):
+        return self.client._request("POST", f"{self.path}/get", data)
+
     def count(self):
         return self.client._request("GET", f"{self.path}/count")
 
@@ -227,3 +230,27 @@ class ChromaVectorStore:
             target.delete(where={"version_id": str(version_id)})
         except Exception:
             raise BusinessException(code=503, message="知识库索引清理失败，请稍后重试") from None
+
+    def version_vector_ids(self, collection: str, version_id: int | str) -> set[str]:
+        """Read actual IDs in bounded pages; never count an entire shared collection."""
+        try:
+            target = self._get_client().get_collection(name=collection, embedding_function=None)
+        except Exception as exc:
+            if self._is_missing(exc):
+                return set()
+            raise BusinessException(code=503, message="知识库入库核验暂时不可用") from None
+        identifiers = set()
+        try:
+            self._check_cosine(target)
+            for offset in range(0, 100_000, 1000):
+                raw = target.get(where={"version_id": str(version_id)}, include=[], limit=1000, offset=offset)
+                page = raw["ids"]
+                if (not isinstance(page, list) or any(not isinstance(value, str) or not value for value in page)
+                        or len(set(page)) != len(page) or identifiers.intersection(page)):
+                    raise ValueError("invalid page")
+                identifiers.update(page)
+                if len(page) < 1000:
+                    return identifiers
+            raise ValueError("audit limit exceeded")
+        except Exception:
+            raise BusinessException(code=503, message="知识库入库核验未完成，请稍后重试") from None

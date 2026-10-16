@@ -10,6 +10,7 @@ from app.services.rag_retrieval import retrieve, reciprocal_rank_fusion
 from app.services import rag_service
 from app.schemas.ai import ChatRequest
 from app.common.exceptions import BusinessException
+from app.models.knowledge import KnowledgeChunk
 
 
 class LexicalTest(unittest.TestCase):
@@ -121,3 +122,22 @@ class HybridRetrievalTest(unittest.TestCase):
         self.add_source()
         with patch("app.services.rag_retrieval.SiliconFlowReranker", side_effect=AssertionError("network")):
             self.assertEqual(self.run_search("预约").rerank_status, "disabled")
+
+    def test_neighbors_preserve_page_and_version_and_exact_duplicates_are_removed(self):
+        _, version, chunk = self.add_source("归还图书需要管理员确认。")
+        adjacent = KnowledgeChunk(version_id=version.id, chunk_index=1, vector_id="adjacent",
+                                  text="确认归还前，仍计入借阅名额。", page=3)
+        duplicate = KnowledgeChunk(version_id=version.id, chunk_index=2, vector_id="duplicate",
+                                   text=chunk.text, page=4)
+        self.db.add_all([adjacent, duplicate])
+        self.db.commit()
+        config = SimpleNamespace(**{**vars(CONFIG), "RAG_NEIGHBOR_CHUNKS": 1, "RAG_TOP_K": 2})
+        with patch.object(rag_service, "settings", config):
+            answer = rag_service.knowledge_chat(
+                ChatRequest(mode="knowledge", messages=[{"role": "user", "content": "归还后还占名额吗"}]),
+                self.db, model=fixtures.FakeModel("确认前仍占名额。[1][2]"), embeddings=FakeEmbeddings(),
+                vector_store=FakeStore([{"id": chunk.vector_id, "distance": 0.1},
+                                       {"id": duplicate.vector_id, "distance": 0.2}]),
+            )
+        self.assertEqual([s.excerpt for s in answer.sources], [chunk.text, adjacent.text])
+        self.assertEqual([s.page for s in answer.sources], [2, 3])

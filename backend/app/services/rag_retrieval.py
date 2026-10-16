@@ -29,6 +29,43 @@ def source_rows(db, identifiers, fingerprint):
     return {chunk.vector_id: (chunk, version, document) for chunk, version, document in db.execute(statement)}
 
 
+def expand_neighbors(db, rows, published, fingerprint, *, top_k, neighbors):
+    anchors, seen_text = [], set()
+    for row in rows:
+        if row["id"] not in published:
+            continue
+        normalized = " ".join(published[row["id"]][0].text.split()).casefold()
+        if normalized in seen_text:
+            continue
+        seen_text.add(normalized)
+        anchors.append(row)
+        if len(anchors) >= top_k:
+            break
+    extras = []
+    seen_ids = {row["id"] for row in anchors}
+    if neighbors:
+        for row in anchors:
+            chunk = published[row["id"]][0]
+            candidates = db.scalars(select(KnowledgeChunk).where(
+                KnowledgeChunk.version_id == chunk.version_id,
+                KnowledgeChunk.chunk_index.in_([chunk.chunk_index + 1, chunk.chunk_index - 1]),
+            ).order_by(KnowledgeChunk.chunk_index.desc())).all()
+            added = 0
+            for adjacent in candidates:
+                normalized = " ".join(adjacent.text.split()).casefold()
+                if adjacent.vector_id in seen_ids or normalized in seen_text:
+                    continue
+                seen_text.add(normalized)
+                seen_ids.add(adjacent.vector_id)
+                extras.append({"id": adjacent.vector_id, "eligible": True, "channels": ["neighbor"]})
+                added += 1
+                if added >= neighbors:
+                    break
+    if extras:
+        published.update(source_rows(db, [row["id"] for row in extras], fingerprint))
+    return anchors + extras
+
+
 @dataclass
 class RetrievalResult:
     rows: list[dict] = field(default_factory=list)

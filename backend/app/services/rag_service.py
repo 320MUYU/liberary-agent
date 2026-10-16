@@ -17,7 +17,7 @@ from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeVer
 from app.schemas.ai import ChatRequest, ChatResponse, ChatSource
 from app.services.embedding_service import create_embeddings, get_embedding_profile
 from app.services.vector_store import ChromaVectorStore
-from app.services.rag_retrieval import retrieve
+from app.services.rag_retrieval import retrieve, expand_neighbors, source_rows
 
 
 NO_MATCH = "知识库暂无足够依据回答这个问题，请查看已发布的馆规或联系管理员确认。"
@@ -84,33 +84,7 @@ def _query(data: ChatRequest, model, history: list[dict], deadline: float) -> st
 
 
 def _published_chunks(db: Session, vector_ids: list[str], fingerprint: str) -> dict:
-    if not vector_ids:
-        return {}
-    statement = (
-        select(KnowledgeChunk, KnowledgeVersion, KnowledgeDocument)
-        .join(KnowledgeVersion, KnowledgeChunk.version_id == KnowledgeVersion.id)
-        .join(KnowledgeDocument, KnowledgeVersion.document_id == KnowledgeDocument.id)
-        .where(
-            KnowledgeChunk.vector_id.in_(vector_ids),
-            KnowledgeDocument.status == "published",
-            KnowledgeDocument.active_version_id == KnowledgeVersion.id,
-            KnowledgeVersion.status == "ready",
-            KnowledgeVersion.embedding_profile == fingerprint,
-        )
-        .execution_options(populate_existing=True)
-    )
-    return {chunk.vector_id: (chunk, version, document) for chunk, version, document in db.execute(statement)}
-
-
-def published_version_ids(db: Session, fingerprint: str) -> list[int]:
-    return list(db.scalars(select(KnowledgeVersion.id).join(
-        KnowledgeDocument, KnowledgeVersion.document_id == KnowledgeDocument.id,
-    ).where(
-        KnowledgeDocument.status == "published",
-        KnowledgeDocument.active_version_id == KnowledgeVersion.id,
-        KnowledgeVersion.status == "ready",
-        KnowledgeVersion.embedding_profile == fingerprint,
-    ).order_by(KnowledgeVersion.id)))
+    return source_rows(db, vector_ids, fingerprint)
 
 
 def _evidence(rows: list[dict], published: dict) -> tuple[list[ChatSource], str]:
@@ -118,7 +92,7 @@ def _evidence(rows: list[dict], published: dict) -> tuple[list[ChatSource], str]
     context = []
     seen = set()
     remaining = getattr(settings, "RAG_CONTEXT_CHARS", 6000)
-    top_k = getattr(settings, "RAG_TOP_K", 4)
+    top_k = getattr(settings, "RAG_TOP_K", 4) * (1 + getattr(settings, "RAG_NEIGHBOR_CHUNKS", 0))
     threshold = getattr(settings, "RAG_MAX_DISTANCE", 0.6)
     for row in rows:
         identifier, distance = row.get("id"), row.get("distance")
@@ -201,6 +175,9 @@ def knowledge_chat(
         db.rollback()
         identifiers = [row["id"] for row in rows if isinstance(row.get("id"), str)]
         published = _published_chunks(db, identifiers, profile["fingerprint"])
+        rows = expand_neighbors(db, rows, published, profile["fingerprint"],
+                                top_k=getattr(settings, "RAG_TOP_K", 4),
+                                neighbors=getattr(settings, "RAG_NEIGHBOR_CHUNKS", 0))
         sources, context = _evidence(rows, published)
         if not sources:
             return ChatResponse(content=NO_MATCH, retrieval_status="no_match")

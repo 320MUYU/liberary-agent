@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     RERANK_TIMEOUT_SECONDS: float = Field(default=8.0, gt=0, le=30)
     RERANK_MIN_SCORE: float = Field(default=0.15, ge=0, le=1)
     RAG_TOP_K: int = Field(default=4, ge=1, le=10)
+    RAG_NEIGHBOR_CHUNKS: int = Field(default=1, ge=0, le=2)
     RAG_MAX_DISTANCE: float = Field(default=0.6, ge=0, le=2)
     RAG_CONTEXT_CHARS: int = Field(default=6000, ge=800, le=12000)
     RAG_HISTORY_CHARS: int = Field(default=6000, ge=1000, le=12000)
