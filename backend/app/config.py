@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     RAG_FUSION_CANDIDATES: int = Field(default=30, ge=1, le=100)
     RAG_RRF_K: int = Field(default=60, ge=1, le=1000)
     RAG_LEXICAL_MIN_COVERAGE: float = Field(default=0.35, ge=0, le=1)
+    RERANK_ENABLED: bool = False
+    RERANK_API_KEY: SecretStr | None = None
+    RERANK_BASE_URL: str = "https://api.siliconflow.cn/v1"
+    RERANK_MODEL: str = "BAAI/bge-reranker-v2-m3"
+    RERANK_TIMEOUT_SECONDS: float = Field(default=8.0, gt=0, le=30)
+    RERANK_MIN_SCORE: float = Field(default=0.15, ge=0, le=1)
     RAG_TOP_K: int = Field(default=4, ge=1, le=10)
     RAG_MAX_DISTANCE: float = Field(default=0.6, ge=0, le=2)
     RAG_CONTEXT_CHARS: int = Field(default=6000, ge=800, le=12000)

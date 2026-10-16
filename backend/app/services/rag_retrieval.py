@@ -2,11 +2,31 @@
 
 from dataclasses import dataclass, field
 import math
+import logging
 from numbers import Real
 import time
+from sqlalchemy import select
 
 from app.common.exceptions import BusinessException
 from app.services.lexical_retrieval import get_index, published_manifest
+from app.models.knowledge import KnowledgeChunk, KnowledgeVersion, KnowledgeDocument
+from app.services.rerank_service import SiliconFlowReranker
+
+
+logger = logging.getLogger(__name__)
+
+
+def source_rows(db, identifiers, fingerprint):
+    if not identifiers:
+        return {}
+    statement = select(KnowledgeChunk, KnowledgeVersion, KnowledgeDocument).join(
+        KnowledgeVersion, KnowledgeChunk.version_id == KnowledgeVersion.id,
+    ).join(KnowledgeDocument, KnowledgeVersion.document_id == KnowledgeDocument.id).where(
+        KnowledgeChunk.vector_id.in_(identifiers), KnowledgeDocument.status == "published",
+        KnowledgeDocument.active_version_id == KnowledgeVersion.id,
+        KnowledgeVersion.status == "ready", KnowledgeVersion.embedding_profile == fingerprint,
+    ).execution_options(populate_existing=True)
+    return {chunk.vector_id: (chunk, version, document) for chunk, version, document in db.execute(statement)}
 
 
 @dataclass
@@ -64,6 +84,8 @@ def base_eligible(row, config):
 def retrieve(db, queries, profile, *, config, embeddings, store, deadline, reranker=None, strategy=None):
     started = time.monotonic()
     mode = strategy or getattr(config, "RAG_RETRIEVAL_MODE", "vector")
+    if mode not in {"vector", "hybrid", "hybrid_rerank"}:
+        raise BusinessException(code=422, message="不支持的检索方式")
     queries = list(dict.fromkeys(query.strip() for query in queries if query.strip()))[:2]
     manifest = published_manifest(db, profile["fingerprint"])
     versions = [item[0] for item in manifest]
@@ -93,7 +115,34 @@ def retrieve(db, queries, profile, *, config, embeddings, store, deadline, reran
     remaining(deadline)
     result.timings_ms["lexical"] = round((time.monotonic() - lexical_started) * 1000, 2)
     rows = reciprocal_rank_fusion(lanes, getattr(config, "RAG_RRF_K", 60))
+    # Refresh publication state before any candidate text is sent to a reranker.
+    db.rollback()
+    published = source_rows(db, [row["id"] for row in rows], profile["fingerprint"])
+    rows = [row for row in rows if row["id"] in published]
     result.candidates = rows[:getattr(config, "RAG_FUSION_CANDIDATES", 30)]
     result.rows = [{**row, "eligible": True} for row in result.candidates if base_eligible(row, config)]
+    rerank_enabled = mode == "hybrid_rerank" or (
+        strategy is None and mode == "hybrid" and getattr(config, "RERANK_ENABLED", False))
+    if rerank_enabled and result.candidates:
+        rerank_started = time.monotonic()
+        try:
+            adapter = reranker or SiliconFlowReranker()
+            documents = ["\n".join([published[row["id"]][2].title,
+                                     published[row["id"]][0].section or "",
+                                     published[row["id"]][0].text]) for row in result.candidates]
+            ranking = adapter.rank(queries[-1], documents, timeout=min(
+                getattr(config, "RERANK_TIMEOUT_SECONDS", 8), remaining(deadline) / 3))
+            result.rows = []
+            for ranked in ranking:
+                row = result.candidates[ranked["index"]]
+                row["rerank_score"] = ranked["score"]
+                if ranked["score"] >= getattr(config, "RERANK_MIN_SCORE", 0.15):
+                    result.rows.append({**row, "eligible": True})
+            result.rerank_status = "applied"
+        except BusinessException:
+            result.rerank_status = "fallback"
+            logger.warning("RAG rerank unavailable; using filtered rank fusion")
+        result.timings_ms["rerank"] = round((time.monotonic() - rerank_started) * 1000, 2)
+    remaining(deadline)
     result.timings_ms["total"] = round((time.monotonic() - started) * 1000, 2)
     return result

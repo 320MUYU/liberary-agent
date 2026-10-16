@@ -9,6 +9,7 @@ from app.services.lexical_retrieval import LexicalIndex, tokenize
 from app.services.rag_retrieval import retrieve, reciprocal_rank_fusion
 from app.services import rag_service
 from app.schemas.ai import ChatRequest
+from app.common.exceptions import BusinessException
 
 
 class LexicalTest(unittest.TestCase):
@@ -91,3 +92,32 @@ class HybridRetrievalTest(unittest.TestCase):
                 embeddings=embeddings, vector_store=FakeStore(),
             )
         self.assertEqual(embeddings.queries, ["那能约多久？", "研讨室预约时长"])
+
+    def test_rerank_can_promote_candidate_and_reject_weak_evidence(self):
+        _, _, first = self.add_source("研讨室签到规定")
+        _, _, second = self.add_source("研讨室提前30分钟取消")
+        class Reranker:
+            def rank(inner, query, documents, *, timeout):
+                self.assertLessEqual(timeout, 8)
+                return sorted([{"index": i, "score": 0.9 if "取消" in text else 0.02}
+                               for i, text in enumerate(documents)], key=lambda row: -row["score"])
+        result = retrieve(self.db, ["取消研讨室"], PROFILE, config=CONFIG, embeddings=FakeEmbeddings(),
+                          store=FakeStore([{"id": first.vector_id, "distance": 0.1},
+                                           {"id": second.vector_id, "distance": 0.8}]),
+                          deadline=time.monotonic() + 30, reranker=Reranker(), strategy="hybrid_rerank")
+        self.assertEqual(result.rerank_status, "applied")
+        self.assertEqual([row["id"] for row in result.rows], [second.vector_id])
+
+    def test_rerank_failure_keeps_filtered_fusion_and_records_degradation(self):
+        _, _, chunk = self.add_source()
+        failing = SimpleNamespace(rank=lambda *args, **kwargs: (_ for _ in ()).throw(BusinessException("不可用")))
+        result = retrieve(self.db, ["预约"], PROFILE, config=CONFIG, embeddings=FakeEmbeddings(),
+                          store=FakeStore([{"id": chunk.vector_id, "distance": 0.1}]),
+                          deadline=time.monotonic() + 30, reranker=failing, strategy="hybrid_rerank")
+        self.assertEqual(result.rerank_status, "fallback")
+        self.assertEqual(result.rows[0]["id"], chunk.vector_id)
+
+    def test_disabled_rerank_never_constructs_model(self):
+        self.add_source()
+        with patch("app.services.rag_retrieval.SiliconFlowReranker", side_effect=AssertionError("network")):
+            self.assertEqual(self.run_search("预约").rerank_status, "disabled")

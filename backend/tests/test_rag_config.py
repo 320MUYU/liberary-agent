@@ -21,6 +21,16 @@ class RagConfigTest(unittest.TestCase):
             with self.subTest(params=params), self.assertRaises(ValidationError):
                 self.make_config(**params)
 
+    def test_rerank_is_optional_and_uses_separate_masked_secret(self):
+        config = self.make_config(RERANK_API_KEY="rerank-local-test-secret")
+        self.assertFalse(config.RERANK_ENABLED)
+        self.assertEqual(config.RERANK_MODEL, "BAAI/bge-reranker-v2-m3")
+        self.assertNotIn("rerank-local-test-secret", repr(config))
+        for params in ({"RERANK_MIN_SCORE": -0.1}, {"RERANK_TIMEOUT_SECONDS": 0},
+                       {"RAG_RETRIEVAL_MODE": "invalid"}, {"RAG_RRF_K": 0}):
+            with self.subTest(params=params), self.assertRaises(ValidationError):
+                self.make_config(**params)
+
 
 if __name__ == "__main__":
     unittest.main()
