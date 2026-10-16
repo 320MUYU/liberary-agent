@@ -10,6 +10,20 @@ from app.agent.graph import build_graph
 
 
 class AgentGraphTest(unittest.TestCase):
+    def test_personal_tool_loop_obeys_budget_and_does_not_execute_writes(self):
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            graph = build_graph(saver, lambda _: AIMessage(content="", tool_calls=[{
+                "id": "loans", "name": "list_my_loans", "args": {}}]),
+                lambda *_: {"ok": True, "data": {"total": 0, "page": 1, "loans": []}},
+                prepare=lambda *_: self.fail("must not prepare without selection"),
+                execute=lambda *_: self.fail("must not write without confirmation"))
+            result = graph.invoke({"query": "我的借阅", "task_type": "return"},
+                {"configurable": {"thread_id": "personal-budget"}})
+            self.assertEqual(result["model_calls"], 4)
+            self.assertLessEqual(result["tool_calls"], 8)
+            self.assertEqual(result["__interrupt__"][0].value["kind"], "select_loan")
+            self.assertNotIn("action", result)
+
     def test_degradation_survives_selection_interrupt(self):
         responses = iter([AIMessage(content="", tool_calls=[{"id": "t", "name": "search_books",
             "args": {"keyword": "历史", "mode": "topic"}}]), AIMessage(content="")])

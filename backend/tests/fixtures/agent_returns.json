@@ -1,0 +1,8 @@
+[
+  {"status": "pending", "can_return": false},
+  {"status": "borrowed", "can_return": true},
+  {"status": "return_pending", "can_return": false},
+  {"status": "returned", "can_return": false},
+  {"status": "rejected", "can_return": false},
+  {"status": "cancelled", "can_return": false}
+]

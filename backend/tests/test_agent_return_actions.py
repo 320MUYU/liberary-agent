@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+import json
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -6,7 +8,7 @@ from tests import test_loan_service as fixtures
 from app.agent import actions
 from app.common.exceptions import BusinessException
 from app.models.agent import AgentAction
-from app.schemas.loan import BorrowConfirmRequest, LoanRequest
+from app.schemas.loan import BorrowConfirmRequest, LoanRequest, LoanRejectRequest
 from app.services import loan_service, book_service
 
 
@@ -88,3 +90,41 @@ class AgentReturnActionsTest(unittest.TestCase):
         self.db.commit()
         with self.assertRaises(BusinessException):
             actions.decide_return(self.db, self.reader.id, action["id"], True)
+
+    def test_fixed_status_cases_only_borrowed_can_prepare(self):
+        cases = json.loads((Path(__file__).parent / "fixtures/agent_returns.json").read_text(encoding="utf-8"))
+        for case in cases:
+            with self.subTest(status=case["status"]):
+                book, _ = self.add_book(barcode="STATUS-" + case["status"])
+                self.db.commit()
+                loan = loan_service.create_loan(self.db, self.reader, LoanRequest(book_id=book.id))
+                if case["status"] in {"borrowed", "return_pending", "returned"}:
+                    loan_service.confirm_borrow(self.db, self.admin, loan.id, BorrowConfirmRequest())
+                if case["status"] in {"return_pending", "returned"}:
+                    loan_service.request_return(self.db, self.reader, loan.id)
+                if case["status"] == "returned":
+                    loan_service.confirm_return(self.db, self.admin, loan.id)
+                if case["status"] == "rejected":
+                    loan_service.reject_loan(self.db, self.admin, loan.id, LoanRejectRequest(reason="固定用例"))
+                if case["status"] == "cancelled":
+                    loan_service.cancel_loan(self.db, self.reader, loan.id)
+                if case["can_return"]:
+                    result = actions.prepare_return(self.db, self.reader.id, case["status"], loan.id)
+                    self.assertEqual(result["loan"]["id"], loan.id)
+                else:
+                    with self.assertRaises(BusinessException):
+                        actions.prepare_return(self.db, self.reader.id, case["status"], loan.id)
+
+    def test_snapshot_change_and_non_boolean_confirmation_never_write(self):
+        loan = self.borrowed()
+        action = actions.prepare_return(self.db, self.reader.id, "snapshot", loan.id)
+        for value in [1, "true", None]:
+            with self.assertRaises(BusinessException):
+                actions.decide_return(self.db, self.reader.id, action["id"], value)
+        loan.due_at += timedelta(days=1)
+        self.db.commit()
+        with self.assertRaises(BusinessException):
+            actions.decide_return(self.db, self.reader.id, action["id"], True)
+        self.assertEqual(loan.status, "borrowed")
+        self.assertIsNone(loan.return_requested_at)
+        self.assertEqual(self.db.query(AgentAction).one().status, "prepared")

@@ -172,6 +172,58 @@ class LoanMySQLConcurrencyTest(unittest.TestCase):
         self.assertIs(type(after["total_copies"]), int)
         self.assertEqual(after["total_copies"], 1)
 
+    def concurrent_returns(self, distinct_actions=False, race_page=False):
+        from app.agent.actions import prepare_return, decide_return
+        loan, book = self.pending("agent-return")
+        loan_service.confirm_borrow(self.db, self.admin, loan.id, BorrowConfirmRequest())
+        loan_id, user_id, book_id = loan.id, self.reader.id, book.id
+        first = prepare_return(self.db, user_id, str(uuid4()), loan_id)
+        second = prepare_return(self.db, user_id, str(uuid4()), loan_id) if distinct_actions else first
+        self.db.commit()
+        barrier = Barrier(2)
+
+        def submit(index):
+            with Session(self.engine) as db:
+                db.execute(text("SET SESSION innodb_lock_wait_timeout = 5"))
+                db.get(Loan, loan_id)  # Establish an old snapshot before the competing write.
+                barrier.wait(timeout=10)
+                try:
+                    if race_page and index == 1:
+                        loan_service.request_return(db, db.get(User, user_id), loan_id)
+                        return 200, None
+                    return 200, decide_return(db, user_id, (first, second)[index]["id"], True)
+                except BusinessException as exc:
+                    return exc.code, None
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(submit, index) for index in range(2)]
+            results = [future.result(timeout=20) for future in futures]
+        self.assertEqual(results[0][0], 200)
+        self.assertIn(results[1][0], (200, 409) if race_page else (200,))
+        if not race_page:
+            self.assertEqual(results[0][1], results[1][1])
+        self.db.expire_all()
+        saved = self.db.get(Loan, loan_id)
+        self.assertEqual(saved.status, "return_pending")
+        self.assertEqual(saved.active_copy_id, saved.copy_id)
+        self.assertEqual(book_service.get_book_detail(self.db, book_id).available_copies, 0)
+        self.assertEqual(self.db.query(Loan).filter_by(reader_id=user_id).count(), 1)
+        requested_at = saved.return_requested_at
+        decide_return(self.db, user_id, first["id"], True)
+        self.db.refresh(saved)
+        self.assertEqual(saved.return_requested_at, requested_at)
+        loan_service.confirm_return(self.db, self.admin, loan_id)
+        self.assertEqual(book_service.get_book_detail(self.db, book_id).available_copies, 1)
+
+    def test_agent_return_same_action_is_atomic_under_concurrency(self):
+        self.concurrent_returns()
+
+    def test_agent_return_distinct_actions_for_same_loan_are_idempotent(self):
+        self.concurrent_returns(distinct_actions=True)
+
+    def test_agent_return_and_existing_page_can_race_safely(self):
+        self.concurrent_returns(race_page=True)
+
     def test_two_books_for_same_reader_do_not_exceed_five(self):
         for number in range(4):
             loan, _ = self.pending(f"existing-{number}")

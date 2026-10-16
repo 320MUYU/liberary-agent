@@ -30,7 +30,9 @@ def main(argv=None):
         JWT_EXPIRE_HOURS="24", JWT_ALGORITHM="HS256", AGENT_TOOL_TRANSPORT="local",
         RAG_ENABLED="false", RERANK_ENABLED="false")
     logging.disable(logging.CRITICAL)
-    modules = ["tests.test_agent_" + name for name in ("tools", "graph", "actions", "api", "mcp", "discovery")]
+    modules = ["tests.test_agent_" + name for name in (
+        "tools", "graph", "actions", "api", "mcp", "discovery", "return_actions",
+        "schema_upgrade", "return_api", "return_mcp")]
     modules.append("tests.test_book_discovery")
     output = io.StringIO()
     started = time.monotonic()
@@ -44,7 +46,10 @@ def main(argv=None):
         "coverage": ["read-only tools", "bounded tool loop", "persistent interrupt recovery",
             "confirmation binding", "expiry and ownership", "atomic rollback",
             "lost write response replay", "MCP capability authorization", "three category discovery",
-            "edition source ownership", "publication changes", "live inventory refresh", "retrieval degradation"]}
+            "edition source ownership", "publication changes", "live inventory refresh", "retrieval degradation",
+            "personal loan isolation", "loan pagination and selection", "six fixed return statuses",
+            "return snapshot binding", "return rollback and lost response recovery",
+            "return capability isolation", "admin confirmation inventory release", "additive schema upgrade"]}
     encoded = json.dumps(report, ensure_ascii=False, indent=2)
     if args.output:
         args.output.write_text(encoded + "\n", encoding="utf-8")

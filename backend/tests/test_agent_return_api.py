@@ -98,3 +98,24 @@ class AgentReturnApiTest(unittest.TestCase):
         self.assertEqual(self.request("GET", path, role="reader")["loans"], page["loans"])
         selected = self.request("POST", path + "/select-loan", role="reader", json={"loan_id": page["loans"][0]["id"]})
         self.assertEqual(selected["status"], "confirm_return")
+
+    def test_empty_personal_page_is_distinct_from_query_failure(self):
+        self.setup_returns()
+        run = self.request("POST", "/agent/runs", role="other", json={
+            "request_id": str(uuid4()), "query": "我的借阅", "task_type": "my_loans"})
+        self.assertEqual(run["status"], "select_loan")
+        self.assertEqual(run["loan_page"]["total"], 0)
+        self.assertEqual(run["loans"], [])
+        with patch("app.agent.runtime.execute_read_tool", return_value={"ok": False, "error_code": "unavailable"}):
+            failed = self.start()
+        self.assertEqual(failed["status"], "tool_unavailable")
+        self.assertEqual(self.request("GET", "/loans", role="reader")["items"][0]["status"], "borrowed")
+
+    def test_pending_return_record_cannot_be_selected_again(self):
+        _, _, loan = self.setup_returns()
+        self.request("POST", f"/loans/{loan['id']}/request-return", role="reader")
+        run = self.start()
+        self.assertEqual(run["loans"][0]["status"], "return_pending")
+        result = self.client.post("/api/agent/runs/" + run["run_id"] + "/select-loan",
+            headers=self.headers["reader"], json={"loan_id": loan["id"]})
+        self.assertEqual(result.json()["code"], 409)

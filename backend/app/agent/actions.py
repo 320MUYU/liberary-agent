@@ -146,5 +146,8 @@ def decide_return(db, user_id, action_id, confirmed):
         if loan.status not in {"return_pending", "returned"}:
             loan = loan_service.request_return_in_transaction(db, reader, loan.id)
         action.status = "completed"
+        # Return database timestamp precision on the first response as well as replays.
+        db.flush()
+        db.refresh(loan, with_for_update=True)
         result = return_receipt(db, loan)
     return result
