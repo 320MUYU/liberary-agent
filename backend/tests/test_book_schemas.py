@@ -239,6 +239,7 @@ class BookResponseTest(unittest.TestCase):
                 "barcode": "LIB-0001",
                 "location": "二楼 A-01",
                 "status": "available",
+                "is_on_loan": False,
             },
         )
 

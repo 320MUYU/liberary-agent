@@ -1,12 +1,13 @@
 """图书书目和实体副本管理，库存始终从馆藏状态计算。"""
 
-from sqlalchemy import case, func, or_
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.common.exceptions import BusinessException
 from app.models.book_copies import BookCopy
 from app.models.books import Book
+from app.models.loans import Loan
 from app.schemas.book import (
     BookCopyCreateRequest,
     BookCopyResponse,
@@ -34,11 +35,12 @@ def get_book_or_404(
 def _inventory(db: Session, book_ids: list[int]) -> dict[int, tuple[int, int]]:
     if not book_ids:
         return {}
+    occupied = select(Loan.id).where(Loan.active_copy_id == BookCopy.id).exists()
     rows = (
         db.query(
             BookCopy.book_id,
             func.count(BookCopy.id),
-            func.sum(case((BookCopy.status == "available", 1), else_=0)),
+            func.sum(case((and_(BookCopy.status == "available", ~occupied), 1), else_=0)),
         )
         .filter(BookCopy.book_id.in_(book_ids), BookCopy.status != "withdrawn")
         .group_by(BookCopy.book_id)
@@ -135,7 +137,15 @@ def list_book_copies_page(
     query = db.query(BookCopy).filter(BookCopy.book_id == book_id)
     total = query.count()
     items = query.order_by(BookCopy.id).offset((page - 1) * page_size).limit(page_size).all()
-    return total, [BookCopyResponse.model_validate(item) for item in items]
+    occupied = set(db.scalars(select(Loan.active_copy_id).where(
+        Loan.active_copy_id.in_([item.id for item in items])
+    )))
+    responses = []
+    for item in items:
+        response = BookCopyResponse.model_validate(item)
+        response.is_on_loan = item.id in occupied
+        responses.append(response)
+    return total, responses
 
 
 def _ensure_barcode_available(
@@ -171,6 +181,11 @@ def update_book_copy(
     )
     if copy is None:
         raise BusinessException(code=404, message="馆藏副本不存在")
+    # 取得书目和副本锁后使用当前读，避免 MySQL 的早期快照漏掉刚确认的借阅。
+    occupied = db.query(Loan.id).filter(Loan.active_copy_id == copy_id).with_for_update(read=True).first()
+    if occupied:
+        db.rollback()
+        raise BusinessException(code=409, message="副本正在借阅或等待归还确认，暂不能修改")
     _ensure_barcode_available(db, data.barcode, exclude_copy_id=copy_id)
     for field, value in data.model_dump().items():
         setattr(copy, field, value)

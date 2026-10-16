@@ -106,6 +106,7 @@ class BookCopyResponse(BaseModel):
     barcode: str
     location: str
     status: CopyStatus
+    is_on_loan: bool = False
 
 
 class BookPageResponse(BaseModel):
