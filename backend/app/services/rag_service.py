@@ -8,12 +8,10 @@ from numbers import Real
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.common.exceptions import BusinessException
 from app.config import settings
-from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeVersion
 from app.schemas.ai import ChatRequest, ChatResponse, ChatSource
 from app.services.embedding_service import create_embeddings, get_embedding_profile
 from app.services.vector_store import ChromaVectorStore

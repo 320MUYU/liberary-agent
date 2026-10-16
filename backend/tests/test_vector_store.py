@@ -58,6 +58,11 @@ class FakeClient:
 
 
 class VectorStoreTest(unittest.TestCase):
+    def test_timeout_can_shrink_between_query_variants(self):
+        store = ChromaVectorStore(timeout=8)
+        client = store._get_client()
+        store.set_timeout(0.5)
+        self.assertEqual(client.timeout, 0.5)
     def test_version_scope_is_applied_before_nearest_neighbors(self):
         self.store.query("library-test", [1.0, 0.0], limit=2, version_ids=[5, 7])
         self.assertEqual(self.client.collection.queries[0]["where"],

@@ -1,4 +1,5 @@
 import math
+import time
 from numbers import Real
 from urllib.parse import quote
 
@@ -119,6 +120,13 @@ class ChromaVectorStore:
             )
         return self._client
 
+    def set_timeout(self, seconds):
+        if not isinstance(seconds, Real) or isinstance(seconds, bool) or not math.isfinite(seconds) or seconds <= 0:
+            raise BusinessException(code=503, message="知识库检索超时")
+        self._timeout = min(self._timeout or seconds, seconds)
+        if isinstance(self._client, NativeChromaHttpClient):
+            self._client.timeout = min(self._client.timeout, seconds)
+
     @staticmethod
     def _is_missing(exc: Exception) -> bool:
         # Chroma's NotFoundError has no HTTP response; test clients may expose status_code instead.
@@ -233,6 +241,7 @@ class ChromaVectorStore:
 
     def version_vector_ids(self, collection: str, version_id: int | str) -> set[str]:
         """Read actual IDs in bounded pages; never count an entire shared collection."""
+        deadline = time.monotonic() + 30
         try:
             target = self._get_client().get_collection(name=collection, embedding_function=None)
         except Exception as exc:
@@ -243,6 +252,7 @@ class ChromaVectorStore:
         try:
             self._check_cosine(target)
             for offset in range(0, 100_000, 1000):
+                self.set_timeout(min(5, (deadline - time.monotonic()) / 2))
                 raw = target.get(where={"version_id": str(version_id)}, include=[], limit=1000, offset=offset)
                 page = raw["ids"]
                 if (not isinstance(page, list) or any(not isinstance(value, str) or not value for value in page)

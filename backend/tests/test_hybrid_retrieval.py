@@ -123,12 +123,26 @@ class HybridRetrievalTest(unittest.TestCase):
         with patch("app.services.rag_retrieval.SiliconFlowReranker", side_effect=AssertionError("network")):
             self.assertEqual(self.run_search("预约").rerank_status, "disabled")
 
+    def test_duplicate_text_does_not_consume_fusion_slots_but_different_titles_survive(self):
+        first_doc, _, first = self.add_source("每人每天只能使用一次。")
+        second_doc, _, second = self.add_source(first.text)
+        third_doc, _, third = self.add_source(first.text)
+        third_doc.title = "打印券使用规定"
+        self.db.commit()
+        result = self.run_search("使用一次", FakeStore([
+            {"id": first.vector_id, "distance": 0.1},
+            {"id": second.vector_id, "distance": 0.2},
+            {"id": third.vector_id, "distance": 0.3},
+        ]))
+        self.assertEqual(len(result.candidates), 2)
+        self.assertIn(third.vector_id, [row["id"] for row in result.candidates])
+
     def test_neighbors_preserve_page_and_version_and_exact_duplicates_are_removed(self):
         _, version, chunk = self.add_source("归还图书需要管理员确认。")
         adjacent = KnowledgeChunk(version_id=version.id, chunk_index=1, vector_id="adjacent",
                                   text="确认归还前，仍计入借阅名额。", page=3)
         duplicate = KnowledgeChunk(version_id=version.id, chunk_index=2, vector_id="duplicate",
-                                   text=chunk.text, page=4)
+                                   text=chunk.text, page=4, section=chunk.section)
         self.db.add_all([adjacent, duplicate])
         self.db.commit()
         config = SimpleNamespace(**{**vars(CONFIG), "RAG_NEIGHBOR_CHUNKS": 1, "RAG_TOP_K": 2})

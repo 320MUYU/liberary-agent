@@ -16,6 +16,11 @@ from app.services.rerank_service import SiliconFlowReranker
 logger = logging.getLogger(__name__)
 
 
+def evidence_identity(source):
+    chunk, _, document = source
+    return tuple(" ".join(value.split()).casefold() for value in (document.title, chunk.section or "", chunk.text))
+
+
 def source_rows(db, identifiers, fingerprint):
     if not identifiers:
         return {}
@@ -34,7 +39,7 @@ def expand_neighbors(db, rows, published, fingerprint, *, top_k, neighbors):
     for row in rows:
         if row["id"] not in published:
             continue
-        normalized = " ".join(published[row["id"]][0].text.split()).casefold()
+        normalized = evidence_identity(published[row["id"]])
         if normalized in seen_text:
             continue
         seen_text.add(normalized)
@@ -52,7 +57,7 @@ def expand_neighbors(db, rows, published, fingerprint, *, top_k, neighbors):
             ).order_by(KnowledgeChunk.chunk_index.desc())).all()
             added = 0
             for adjacent in candidates:
-                normalized = " ".join(adjacent.text.split()).casefold()
+                normalized = evidence_identity((adjacent, published[row["id"]][1], published[row["id"]][2]))
                 if adjacent.vector_id in seen_ids or normalized in seen_text:
                     continue
                 seen_text.add(normalized)
@@ -137,6 +142,8 @@ def retrieve(db, queries, profile, *, config, embeddings, store, deadline, reran
             embeddings.timeout = min(embeddings.timeout, remaining(deadline))
         vector = embeddings.embed_query(query)
         remaining(deadline)
+        if hasattr(store, "set_timeout"):
+            store.set_timeout(min(getattr(config, "CHROMA_TIMEOUT_SECONDS", 10), remaining(deadline) / 3))
         rows = store.query(profile["collection_name"], vector,
                            limit=getattr(config, "RAG_CANDIDATES", 20), version_ids=versions)
         rows = [row for row in rows if isinstance(row.get("id"), str)
@@ -155,7 +162,15 @@ def retrieve(db, queries, profile, *, config, embeddings, store, deadline, reran
     # Refresh publication state before any candidate text is sent to a reranker.
     db.rollback()
     published = source_rows(db, [row["id"] for row in rows], profile["fingerprint"])
-    rows = [row for row in rows if row["id"] in published]
+    unique_rows, seen_text = [], set()
+    for row in rows:
+        if row["id"] not in published:
+            continue
+        identity = evidence_identity(published[row["id"]])
+        if identity not in seen_text:
+            unique_rows.append(row)
+            seen_text.add(identity)
+    rows = unique_rows
     result.candidates = rows[:getattr(config, "RAG_FUSION_CANDIDATES", 30)]
     result.rows = [{**row, "eligible": True} for row in result.candidates if base_eligible(row, config)]
     rerank_enabled = mode == "hybrid_rerank" or (

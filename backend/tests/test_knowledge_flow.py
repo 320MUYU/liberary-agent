@@ -80,6 +80,7 @@ class KnowledgeFlowTest(unittest.TestCase):
         profile = {"fingerprint": "offline-flow", "collection_name": "library_flow"}
         patches = [
             patch.object(settings, "RAG_ENABLED", True),
+            patch.object(settings, "RERANK_ENABLED", False),
             patch.object(settings, "KNOWLEDGE_DIR", self.directory),
             patch("app.services.knowledge_service.get_embedding_profile", return_value=profile),
             patch("app.services.rag_service.get_embedding_profile", return_value=profile),
