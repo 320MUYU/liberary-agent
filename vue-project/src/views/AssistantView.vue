@@ -3,6 +3,7 @@ import { computed, nextTick, ref } from 'vue'
 import { chatApi } from '@/aiApi'
 import { getKnowledgeSourceApi } from '@/api/knowledgeApi'
 import { buildChatHistory, retrievalLabel } from '@/utils/chatConversation'
+import BookBorrowAgent from '@/components/BookBorrowAgent.vue'
 
 const input = ref('')
 const thinking = ref(false)
@@ -127,7 +128,7 @@ async function openSource(source) {
 </script>
 
 <template>
-  <div class="assistant-page">
+  <div class="assistant-page" :class="{ 'borrow-mode': mode === 'borrow' }">
     <section class="chat-panel surface">
       <header class="chat-header">
         <div class="ai-avatar">
@@ -146,83 +147,101 @@ async function openSource(source) {
         >
           <el-option label="普通聊天" value="chat" />
           <el-option label="知识库问答" value="knowledge" />
+          <el-option label="图书借阅助手" value="borrow" />
         </el-select>
-        <button class="clear-chat" title="新建对话" :disabled="thinking" @click="resetConversation">
+        <button
+          v-if="mode !== 'borrow'"
+          class="clear-chat"
+          title="新建对话"
+          :disabled="thinking"
+          @click="resetConversation"
+        >
           <el-icon><EditPen /></el-icon>
         </button>
       </header>
 
-      <div ref="chatBody" class="chat-body">
-        <div class="day-divider"><span>今天</span></div>
-        <div v-for="(message, index) in messages" :key="index" :class="['message', message.role]">
-          <span v-if="message.role === 'assistant'" class="message-avatar"
-            ><el-icon><MagicStick /></el-icon
-          ></span>
-          <div class="message-wrap">
-            <div class="bubble">{{ message.text }}</div>
-            <div v-if="message.retrievalStatus" class="retrieval-status">
-              {{ retrievalLabel(message.retrievalStatus) }}
-            </div>
-            <div v-if="message.sources?.length" class="answer-sources">
-              <button
-                v-for="source in message.sources"
-                :key="source.number"
-                @click="openSource(source)"
+      <BookBorrowAgent v-if="mode === 'borrow'" />
+      <template v-else>
+        <div ref="chatBody" class="chat-body">
+          <div class="day-divider"><span>今天</span></div>
+          <div v-for="(message, index) in messages" :key="index" :class="['message', message.role]">
+            <span v-if="message.role === 'assistant'" class="message-avatar"
+              ><el-icon><MagicStick /></el-icon
+            ></span>
+            <div class="message-wrap">
+              <div class="bubble">{{ message.text }}</div>
+              <div v-if="message.retrievalStatus" class="retrieval-status">
+                {{ retrievalLabel(message.retrievalStatus) }}
+              </div>
+              <div v-if="message.sources?.length" class="answer-sources">
+                <button
+                  v-for="source in message.sources"
+                  :key="source.number"
+                  @click="openSource(source)"
+                >
+                  [{{ source.number }}] {{ source.title }} · v{{ source.version }}
+                  <span v-if="source.page"> · 第{{ source.page }}页</span>
+                  <span v-else-if="source.section"> · {{ source.section }}</span>
+                </button>
+              </div>
+              <div v-if="message.failed" class="retrieval-status">发送失败 · 未纳入后续上下文</div>
+              <small
+                >{{ message.role === 'assistant' ? '阅见 AI' : '你' }} · {{ message.time }}</small
               >
-                [{{ source.number }}] {{ source.title }} · v{{ source.version }}
-                <span v-if="source.page"> · 第{{ source.page }}页</span>
-                <span v-else-if="source.section"> · {{ source.section }}</span>
-              </button>
             </div>
-            <div v-if="message.failed" class="retrieval-status">发送失败 · 未纳入后续上下文</div>
-            <small
-              >{{ message.role === 'assistant' ? '阅见 AI' : '你' }} · {{ message.time }}</small
+          </div>
+          <div v-if="thinking" class="message assistant">
+            <span class="message-avatar"
+              ><el-icon><MagicStick /></el-icon
+            ></span>
+            <div class="thinking-bubble">
+              <i></i><i></i><i></i><span>DeepSeek 正在生成回答</span>
+            </div>
+          </div>
+          <div v-if="errorMessage" class="chat-error" role="alert">
+            <el-icon><InfoFilled /></el-icon>{{ errorMessage }}
+            <el-button
+              v-if="pendingRequest"
+              size="small"
+              :disabled="thinking"
+              @click="submitPending"
+              >重试本次</el-button
             >
           </div>
         </div>
-        <div v-if="thinking" class="message assistant">
-          <span class="message-avatar"
-            ><el-icon><MagicStick /></el-icon
-          ></span>
-          <div class="thinking-bubble"><i></i><i></i><i></i><span>DeepSeek 正在生成回答</span></div>
-        </div>
-        <div v-if="errorMessage" class="chat-error" role="alert">
-          <el-icon><InfoFilled /></el-icon>{{ errorMessage }}
-          <el-button v-if="pendingRequest" size="small" :disabled="thinking" @click="submitPending"
-            >重试本次</el-button
-          >
-        </div>
-      </div>
 
-      <div class="suggestions">
-        <button v-for="item in suggestions" :key="item" :disabled="thinking" @click="send(item)">
-          {{ item }}
-        </button>
-      </div>
-      <footer class="chat-input">
-        <el-input
-          v-model="input"
-          type="textarea"
-          :disabled="thinking"
-          :autosize="{ minRows: 1, maxRows: 4 }"
-          maxlength="4000"
-          resize="none"
-          :placeholder="
-            mode === 'knowledge' ? '询问已发布的馆规或预约说明…' : '询问系统流程或描述你的空间需求…'
-          "
-          @keydown.enter.exact.prevent="send()"
-        />
-        <button :disabled="!input.trim() || thinking" @click="send()">
-          <el-icon><Promotion /></el-icon>
-        </button>
-        <p>
-          <el-icon><InfoFilled /></el-icon> AI 建议仅供参考，最终预约结果以管理员审核为准
-          <span>Enter 发送</span>
-        </p>
-      </footer>
+        <div class="suggestions">
+          <button v-for="item in suggestions" :key="item" :disabled="thinking" @click="send(item)">
+            {{ item }}
+          </button>
+        </div>
+        <footer class="chat-input">
+          <el-input
+            v-model="input"
+            type="textarea"
+            :disabled="thinking"
+            :autosize="{ minRows: 1, maxRows: 4 }"
+            maxlength="4000"
+            resize="none"
+            :placeholder="
+              mode === 'knowledge'
+                ? '询问已发布的馆规或预约说明…'
+                : '询问系统流程或描述你的空间需求…'
+            "
+            @keydown.enter.exact.prevent="send()"
+          />
+          <button :disabled="!input.trim() || thinking" @click="send()">
+            <el-icon><Promotion /></el-icon>
+          </button>
+          <p>
+            <el-icon><InfoFilled /></el-icon> AI 建议仅供参考，最终预约结果以管理员审核为准
+            <span>Enter 发送</span>
+          </p>
+        </footer>
+      </template>
     </section>
 
-    <aside class="agent-sidebar">
+    <aside v-if="mode !== 'borrow'" class="agent-sidebar">
       <section class="agent-trace surface">
         <div class="side-title">
           <div>
@@ -306,6 +325,9 @@ async function openSource(source) {
 </template>
 
 <style scoped>
+.assistant-page.borrow-mode {
+  grid-template-columns: minmax(0, 1fr);
+}
 .mode-select {
   width: 140px;
   margin-left: auto;
