@@ -9,27 +9,29 @@ from langgraph.types import Command
 from sqlalchemy import or_, update
 from sqlalchemy.exc import IntegrityError
 
-from app.agent.actions import decide_borrow, prepare_borrow
+from app.agent.actions import decide_borrow, prepare_borrow, decide_return, prepare_return
 from app.agent.graph import build_graph
 from app.agent.policy import RunBudget
-from app.agent.tools import execute_read_tool, tool_definitions
+from app.agent.tools import execute_read_tool, tool_definitions, allowed_tools, public_loan, error
 from app.common.exceptions import BusinessException
 from app.config import settings
 from app.models.agent import AgentRun
 from app.services.book_discovery import refresh_books
 from app.services.ai_services import _create_chat_model
+from app.services import loan_service
+from app.models.users import User
 
 
 logger = logging.getLogger(__name__)
 
 
-def call_model(messages, budget):
+def call_model(messages, budget, task_type="borrow"):
     from langsmith import tracing_context
     budget.consume("model")
     model = _create_chat_model(max_retries=0, max_tokens=512).model_copy(
         update={"request_timeout": min(20, budget.remaining())})
     with tracing_context(enabled=False):
-        result = model.bind_tools(tool_definitions()).invoke(messages)
+        result = model.bind_tools(tool_definitions(task_type)).invoke(messages)
     budget.remaining()
     return result
 
@@ -43,33 +45,54 @@ def owned_run(db, user_id, run_id):
     return run
 
 
-def start_run(db, user_id, request_id, query):
+def start_run(db, user_id, request_id, query, task_type="borrow"):
+    if task_type not in {"borrow", "my_loans", "return"}:
+        raise BusinessException("不支持的任务类型", 422)
     run = db.query(AgentRun).filter_by(run_id=request_id).first()
     if run is not None:
         owned_run(db, user_id, request_id)
-        if run.query != query:
+        if run.query != query or run.task_type != task_type:
             raise BusinessException("任务编号已用于其他问题，请新建查找", 409)
     else:
-        db.add(AgentRun(run_id=request_id, user_id=user_id, query=query,
+        db.add(AgentRun(run_id=request_id, user_id=user_id, query=query, task_type=task_type,
             expires_at=datetime.now() + timedelta(hours=24)))
         try:
             db.commit()
         except IntegrityError:
             db.rollback()
             run = owned_run(db, user_id, request_id)
-            if run.query != query:
+            if run.query != query or run.task_type != task_type:
                 raise BusinessException("任务内容冲突", 409)
     return run_graph(db, user_id, request_id, "retry")
 
 
-def graph_view(run_id, snapshot, db=None):
+def graph_view(run_id, snapshot, db=None, user_id=None):
     for task in snapshot.tasks:
         if task.interrupts:
             value = dict(task.interrupts[0].value)
             if value["kind"] == "select_book" and db is not None:
                 value["books"] = refresh_books(db, value["books"])
+            if value["kind"] == "select_loan" and db is not None:
+                db.rollback()
+                user = db.get(User, user_id)
+                loans = []
+                for loan in snapshot.values.get("loans", value["loans"]):
+                    try:
+                        loans.append(public_loan(loan_service.get_my_loan(db, user, loan["id"])))
+                    except BusinessException as exc:
+                        if exc.code != 404:
+                            raise
+                value.update(loans=loans, loan_page={**snapshot.values.get("loan_page", value["loan_page"]), "loans": loans})
             return {"run_id": run_id, "status": value["kind"], **{k: v for k, v in value.items() if k != "kind"}}
     state = snapshot.values
+    if db is not None and state.get("task_type", "borrow") != "borrow" and state.get("status") in {"return_pending", "returned"}:
+        db.rollback()
+        user = db.get(User, user_id)
+        current = loan_service.get_my_loan(db, user, state["receipt"]["loan_id"])
+        # No write is needed to show an administrator's later confirmation.
+        receipt = {"status": current.status, "loan_id": current.id, "loan": public_loan(current),
+            "message": "管理员已确认归还。" if current.status == "returned" else "归还申请已提交，请交还实体图书，待管理员确认归还。"}
+        return {"run_id": run_id, "status": receipt["status"], "receipt": receipt, "action": state.get("action"), "message": receipt["message"]}
     return {"run_id": run_id, "status": state.get("status", "retryable"),
             "message": state.get("message", "任务尚未完成，可重试继续。"),
             "degraded": state.get("degraded", []),
@@ -79,6 +102,7 @@ def graph_view(run_id, snapshot, db=None):
 def run_graph(db, user_id, run_id, operation="view", payload=None):
     run = owned_run(db, user_id, run_id)
     query = run.query
+    task_type = run.task_type
     token = str(uuid4())
     now = datetime.now()
     acquired = db.execute(update(AgentRun).where(AgentRun.run_id == run_id,
@@ -93,6 +117,9 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
         with SqliteSaver.from_conn_string(str(settings.AGENT_CHECKPOINT_PATH)) as saver:
             def read(name, args):
                 try:
+                    if name not in allowed_tools(task_type):
+                        budget.consume("tool")
+                        return error("tool_not_allowed", "当前任务不支持该工具")
                     if settings.AGENT_TOOL_TRANSPORT == "mcp":
                         from app.agent.mcp_adapter import read_tool
                         return read_tool(user_id, name, args, budget)
@@ -103,19 +130,23 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
             def execute(action_id, confirmed):
                 if settings.AGENT_TOOL_TRANSPORT == "mcp":
                     from app.agent.mcp_adapter import submit_decision
-                    return submit_decision(user_id, action_id, confirmed)
-                return decide_borrow(db, user_id, action_id, confirmed)
+                    return submit_decision(user_id, action_id, confirmed, action_type="borrow" if task_type == "borrow" else "return")
+                return (decide_borrow if task_type == "borrow" else decide_return)(db, user_id, action_id, confirmed)
 
-            graph = build_graph(saver, lambda messages: call_model(messages, budget),
+            graph = build_graph(saver, lambda messages: call_model(messages, budget) if task_type == "borrow" else call_model(messages, budget, task_type),
                 read,
                 prepare=lambda book_id: prepare_borrow(db, user_id, run_id, book_id),
-                execute=execute)
+                execute=execute, prepare_return=lambda loan_id: prepare_return(db, user_id, run_id, loan_id))
             config = {"configurable": {"thread_id": run_id}, "recursion_limit": 24}
             snapshot = graph.get_state(config)
-            view = graph_view(run_id, snapshot, db)
+            def current_view():
+                return {**graph_view(run_id, graph.get_state(config), db, user_id), "task_type": task_type}
+            view = current_view()
             if operation == "view":
                 return view
             if operation == "select":
+                if task_type != "borrow":
+                    raise BusinessException("请在本任务中选择借阅记录", 409)
                 if view["status"] != "select_book":
                     if (view.get("action") or {}).get("book", {}).get("id") == payload["book_id"]:
                         return view
@@ -123,24 +154,46 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
                 if payload["book_id"] not in {b["id"] for b in view["books"]}:
                     raise BusinessException("请选择本次查找返回的书目", 409)
                 inputs = Command(resume=payload)
+            elif operation == "loans_page":
+                if task_type == "borrow" or view["status"] != "select_loan":
+                    raise BusinessException("当前任务不允许翻页，请刷新", 409)
+                filters = view.get("loan_page", {})
+                result = read("list_my_loans", {"page": payload["page"],
+                    "status": filters.get("status"), "keyword": filters.get("keyword", "")})
+                if not result.get("ok"):
+                    raise BusinessException(result.get("message", "借阅查询暂不可用"), 503)
+                graph.update_state(config, {"loans": result["data"]["loans"], "loan_page": result["data"],
+                    "pending_tools": []}, as_node="think")
+                graph.invoke(None, config)
+                return current_view()
+            elif operation == "select_loan":
+                if task_type == "borrow":
+                    raise BusinessException("当前任务不允许选择借阅记录", 409)
+                if view["status"] != "select_loan":
+                    if (view.get("action") or {}).get("loan", {}).get("id") == payload["loan_id"]:
+                        return view
+                    raise BusinessException("当前任务不允许选择记录，请刷新", 409)
+                if payload["loan_id"] not in {l["id"] for l in view["loans"] if l["status"] == "borrowed"}:
+                    raise BusinessException("请选择本页借阅中的记录", 409)
+                inputs = Command(resume=payload)
             elif operation == "decision":
                 action = view.get("action") or {}
                 if action.get("id") != payload["action_id"]:
                     raise BusinessException("确认内容不匹配", 409)
-                if view["status"] in {"pending", "cancelled"}:
-                    expected = view["status"] == "pending"
+                if view["status"] in {"pending", "return_pending", "returned", "cancelled"}:
+                    expected = view["status"] != "cancelled"
                     if payload["confirmed"] != expected:
                         raise BusinessException("操作已完成，请查看我的借阅", 409)
                     return view
-                if view["status"] != "confirm_borrow":
+                if view["status"] != ("confirm_borrow" if task_type == "borrow" else "confirm_return"):
                     raise BusinessException("任务尚未到确认阶段，请刷新", 409)
                 inputs = Command(resume=payload)
             else:
                 if any(task.interrupts for task in snapshot.tasks) or (snapshot.values and not snapshot.next):
                     return view
-                inputs = None if snapshot.values else {"query": query, "books": [], "messages": [], "model_calls": 0, "tool_calls": 0}
+                inputs = None if snapshot.values else {"query": query, "task_type": task_type, "books": [], "messages": [], "model_calls": 0, "tool_calls": 0}
             graph.invoke(inputs, config)
-            return graph_view(run_id, graph.get_state(config), db)
+            return current_view()
     except BusinessException:
         raise
     except Exception:

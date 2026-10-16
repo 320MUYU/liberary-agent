@@ -5,11 +5,26 @@ from tests import test_loan_service as fixtures
 from app.agent.policy import RunBudget
 from app.agent.tools import execute_read_tool, tool_definitions
 from app.models.loans import Loan
+from app.schemas.loan import LoanRequest
+from app.services import loan_service
 
 
 class AgentToolsTest(unittest.TestCase):
     setUp = fixtures.LoanServiceTest.setUp
     add_book = fixtures.LoanServiceTest.add_book
+
+    def test_personal_loan_tools_are_read_only_scoped_and_strict(self):
+        loan = loan_service.create_loan(self.db, self.reader, LoanRequest(book_id=self.book.id))
+        own = execute_read_tool(self.db, self.reader.id, "list_my_loans", {}, RunBudget())
+        self.assertTrue(own["ok"])
+        self.assertEqual([l["id"] for l in own["data"]["loans"]], [loan.id])
+        self.assertNotIn("reader_username", own["data"]["loans"][0])
+        denied = execute_read_tool(self.db, self.other.id, "get_my_loan", {"loan_id": loan.id}, RunBudget())
+        self.assertFalse(denied["ok"])
+        forged = execute_read_tool(self.db, self.reader.id, "list_my_loans", {"user_id": self.other.id}, RunBudget())
+        self.assertEqual(forged["error_code"], "invalid_arguments")
+        self.assertEqual(loan.status, "pending")
+        self.assertEqual({t["name"] for t in tool_definitions("return")}, {"list_my_loans", "get_my_loan"})
 
     def test_topic_search_returns_metadata_and_degradation_without_writing(self):
         self.book.category = "历史图书"

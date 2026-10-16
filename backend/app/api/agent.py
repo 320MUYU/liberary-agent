@@ -1,4 +1,5 @@
 from uuid import UUID
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
@@ -16,6 +17,7 @@ class StartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     request_id: UUID
     query: str = Field(min_length=1, max_length=1000)
+    task_type: Literal["borrow", "my_loans", "return"] = "borrow"
 
 
 class SelectRequest(BaseModel):
@@ -29,9 +31,19 @@ class DecisionRequest(BaseModel):
     confirmed: StrictBool
 
 
+class SelectLoanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    loan_id: int = Field(gt=0, strict=True)
+
+
+class LoanPageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    page: int = Field(ge=1, le=10000, strict=True)
+
+
 @router.post("/runs")
 def start(data: StartRequest, user=Depends(get_current_user), db=Depends(get_db)):
-    return Response.success(data=runtime.start_run(db, user.id, str(data.request_id), data.query))
+    return Response.success(data=runtime.start_run(db, user.id, str(data.request_id), data.query, data.task_type))
 
 
 @router.get("/runs/{run_id}")
@@ -47,6 +59,16 @@ def select(run_id: UUID, data: SelectRequest, user=Depends(get_current_user), db
 @router.post("/runs/{run_id}/decision")
 def decide(run_id: UUID, data: DecisionRequest, user=Depends(get_current_user), db=Depends(get_db)):
     return Response.success(data=runtime.run_graph(db, user.id, str(run_id), "decision", data.model_dump(mode="json")))
+
+
+@router.post("/runs/{run_id}/select-loan")
+def select_loan(run_id: UUID, data: SelectLoanRequest, user=Depends(get_current_user), db=Depends(get_db)):
+    return Response.success(data=runtime.run_graph(db, user.id, str(run_id), "select_loan", data.model_dump()))
+
+
+@router.post("/runs/{run_id}/loans-page")
+def loans_page(run_id: UUID, data: LoanPageRequest, user=Depends(get_current_user), db=Depends(get_db)):
+    return Response.success(data=runtime.run_graph(db, user.id, str(run_id), "loans_page", data.model_dump()))
 
 
 @router.post("/runs/{run_id}/retry")

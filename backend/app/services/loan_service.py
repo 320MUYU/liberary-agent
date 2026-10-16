@@ -263,10 +263,20 @@ def _page(query, page: int, page_size: int, status: str | None):
     return total, [_row_response(row) for row in rows]
 
 
-def list_my_loans(db: Session, current_user: User, page: int, page_size: int, status: str | None):
-    return _page(
-        _response_query(db).filter(Loan.reader_id == current_user.id), page, page_size, status
-    )
+def list_my_loans(db: Session, current_user: User, page: int, page_size: int, status: str | None, keyword: str | None = None):
+    query = _response_query(db).filter(Loan.reader_id == current_user.id)
+    if keyword and keyword.strip():
+        value = keyword.strip()
+        query = query.filter(or_(Book.title.contains(value, autoescape=True),
+            Book.author.contains(value, autoescape=True), Book.isbn.contains(value, autoescape=True)))
+    return _page(query, page, page_size, status)
+
+
+def get_my_loan(db: Session, current_user: User, loan_id: int):
+    row = _response_query(db).filter(Loan.reader_id == current_user.id, Loan.id == loan_id).first()
+    if row is None:
+        raise BusinessException("借阅记录不存在", 404)
+    return _row_response(row)
 
 
 def list_loans_page(

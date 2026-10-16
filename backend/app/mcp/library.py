@@ -5,12 +5,13 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field, StrictBool
 from starlette.responses import JSONResponse
 
-from app.agent.actions import decide_borrow
+from app.agent.actions import decide_borrow, decide_return
 from app.agent.mcp_adapter import verify_token
 from app.agent.policy import RunBudget
 from app.agent.tools import execute_read_tool, error
 from app.common.exceptions import BusinessException
 from app.database import SessionLocal
+from app.schemas.loan import LoanStatus
 
 
 identity = ContextVar("library_mcp_identity", default=None)
@@ -44,7 +45,8 @@ def create_server(session_factory=SessionLocal):
 
     def read(name, arguments):
         claims = identity.get()
-        if not claims or claims.get("scope") != "catalogue:read":
+        required = "loans:read" if name in {"list_my_loans", "get_my_loan"} else "catalogue:read"
+        if not claims or claims.get("scope") != required:
             return error("403", "工具权限不足")
         with session_factory() as db:
             return execute_read_tool(db, int(claims["sub"]), name, arguments, RunBudget())
@@ -61,15 +63,34 @@ def create_server(session_factory=SessionLocal):
         return read("get_book", {"book_id": book_id})
 
     @server.tool()
+    async def list_my_loans(page: Annotated[int, Field(strict=True, ge=1, le=10000)] = 1,
+                            status: LoanStatus | None = None, keyword: str = "") -> dict[str, Any]:
+        """只读查询当前凭证所属读者的借阅记录，不接受指定读者参数。"""
+        return read("list_my_loans", {"page": page, "status": status, "keyword": keyword})
+
+    @server.tool()
+    async def get_my_loan(loan_id: Annotated[int, Field(strict=True, gt=0)]) -> dict[str, Any]:
+        """只读查询本人具体借阅记录。"""
+        return read("get_my_loan", {"loan_id": loan_id})
+
+    @server.tool()
     async def submit_borrow_decision(action_id: str, confirmed: StrictBool) -> dict[str, Any]:
         """执行服务端已授权的具体确认；普通查询凭证不能调用。"""
+        return submit("borrow", action_id, confirmed)
+
+    @server.tool()
+    async def submit_return_decision(action_id: str, confirmed: StrictBool) -> dict[str, Any]:
+        """执行服务端绑定到归还操作的确认；读凭证和借阅确认凭证均不能调用。"""
+        return submit("return", action_id, confirmed)
+
+    def submit(action_type, action_id, confirmed):
         claims = identity.get()
-        if (not claims or claims.get("scope") != "borrow:decision"
+        if (not claims or claims.get("scope") != action_type + ":decision"
                 or claims.get("action_id") != action_id or claims.get("confirmed") is not confirmed):
             return error("403", "缺少本次操作的确认授权")
         try:
             with session_factory() as db:
-                receipt = decide_borrow(db, int(claims["sub"]), action_id, confirmed)
+                receipt = (decide_borrow if action_type == "borrow" else decide_return)(db, int(claims["sub"]), action_id, confirmed)
                 return {"ok": True, "data": receipt}
         except BusinessException as exc:
             return error(str(exc.code), exc.message)

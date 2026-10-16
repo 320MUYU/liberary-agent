@@ -23,13 +23,15 @@ def signing_key():
     return hmac.new(settings.JWT_SECRET_KEY.encode(), b"library-mcp-v1", hashlib.sha256).digest()
 
 
-def issue_token(user_id, action_id=None, confirmed=None):
+def issue_token(user_id, action_id=None, confirmed=None, *, action_type="borrow", read_scope="catalogue:read"):
+    if action_type not in {"borrow", "return"} or read_scope not in {"catalogue:read", "loans:read"}:
+        raise ValueError("Invalid capability")
     claims = {"sub": str(user_id), "aud": AUDIENCE, "iss": ISSUER,
-              "iat": int(time.time()), "exp": int(time.time()) + 90, "scope": "catalogue:read"}
+              "iat": int(time.time()), "exp": int(time.time()) + 90, "scope": read_scope}
     if action_id is not None:
         if type(confirmed) is not bool:
             raise ValueError("Invalid confirmation")
-        claims.update(scope="borrow:decision", action_id=action_id, confirmed=confirmed)
+        claims.update(scope=action_type + ":decision", action_id=action_id, confirmed=confirmed)
     return jwt.encode(claims, signing_key(), algorithm="HS256")
 
 
@@ -38,14 +40,14 @@ def verify_token(token):
                       options={"require": ["sub", "aud", "iss", "iat", "exp", "scope"]})
 
 
-async def _call(user_id, name, arguments, timeout, action_id=None, confirmed=None):
+async def _call(user_id, name, arguments, timeout, action_id=None, confirmed=None, *, action_type="borrow", read_scope="catalogue:read"):
     url = settings.AGENT_MCP_URL
     parsed = urlsplit(url)
     if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username
             or parsed.password or parsed.query or parsed.fragment
             or (parsed.scheme == "http" and parsed.hostname not in {"127.0.0.1", "localhost", "::1"})):
         raise ValueError("Invalid MCP endpoint")
-    token = issue_token(user_id, action_id, confirmed)
+    token = issue_token(user_id, action_id, confirmed, action_type=action_type, read_scope=read_scope)
     async with asyncio.timeout(timeout):
         async with httpx.AsyncClient(timeout=timeout, trust_env=False, follow_redirects=False,
                 headers={"Authorization": "Bearer " + token}) as client:
@@ -67,7 +69,8 @@ def read_tool(user_id, name, arguments, budget):
         if name not in SCHEMAS:
             return error("tool_not_allowed", "不支持的工具")
         arguments = SCHEMAS[name].model_validate(arguments).model_dump()
-        result = asyncio.run(_call(user_id, name, arguments, min(15, budget.remaining())))
+        result = asyncio.run(_call(user_id, name, arguments, min(15, budget.remaining()),
+            read_scope="loans:read" if name in {"list_my_loans", "get_my_loan"} else "catalogue:read"))
         budget.remaining()
         return result
     except ValidationError:
@@ -78,10 +81,12 @@ def read_tool(user_id, name, arguments, budget):
         return error("unavailable", "图书工具暂时不可用，请稍后重试", True)
 
 
-def submit_decision(user_id, action_id, confirmed):
+def submit_decision(user_id, action_id, confirmed, *, action_type="borrow"):
     try:
-        result = asyncio.run(_call(user_id, "submit_borrow_decision",
-            {"action_id": action_id, "confirmed": confirmed}, 15, action_id, confirmed))
+        if action_type not in {"borrow", "return"}:
+            raise ValueError("Invalid action type")
+        result = asyncio.run(_call(user_id, "submit_" + action_type + "_decision",
+            {"action_id": action_id, "confirmed": confirmed}, 15, action_id, confirmed, action_type=action_type))
     except Exception:
         raise BusinessException("申请结果暂时无法确认，请刷新任务并重试查询回执。", 503) from None
     if not result.get("ok"):
