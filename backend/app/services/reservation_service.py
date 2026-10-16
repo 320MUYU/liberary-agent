@@ -6,8 +6,10 @@
 """
 
 from datetime import datetime, timedelta
+from contextlib import contextmanager
 
 from sqlalchemy import or_
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, joinedload
 
 from app.common.exceptions import BusinessException
@@ -41,25 +43,49 @@ def approved_conflict(
     return query.with_for_update().first() is not None
 
 
-def create_reservation(
-    db: Session, current_user: User, data: ReservationCreateRequest
-) -> Reservation:
-    """提交预约申请"""
-    now = datetime.now()
-    starts_at = datetime.combine(data.date, datetime.strptime(data.start, "%H:%M").time())
-    if starts_at < now + timedelta(hours=2):
-        raise BusinessException(message="预约需至少提前 2 小时提交")
+@contextmanager
+def write_transaction(db):
+    try:
+        yield
+        db.commit()
+    except OperationalError as exc:
+        db.rollback()
+        if exc.orig.args and exc.orig.args[0] in (1213, 1205):
+            raise BusinessException("预约发生并发冲突，请刷新后重试", 409) from exc
+        raise
+    except Exception:
+        db.rollback()
+        raise
 
-    # 审核也锁同一间实验室，避免提交与审核同时进行时遗漏时段冲突。
-    lab = db.query(Lab).filter(Lab.id == data.lab_id).with_for_update().first()
-    if not lab:
-        raise BusinessException(code=404, message="学习空间不存在")
+
+def lock_space(db, lab_id):
+    lab = db.query(Lab).filter(Lab.id == lab_id).populate_existing().with_for_update().first()
+    if lab is None:
+        raise BusinessException("学习空间不存在", 404)
+    return lab
+
+
+def validate_reservation(db, lab, data):
+    starts_at = datetime.combine(data.date, datetime.strptime(data.start, "%H:%M").time())
+    if starts_at < datetime.now() + timedelta(hours=2):
+        raise BusinessException(message="预约需至少提前 2 小时提交")
     if lab.status == "maintenance":
         raise BusinessException(message="学习空间维护中，暂不可预约")
     if data.people > lab.capacity:
         raise BusinessException(message=f"预约人数不能超过空间容量 {lab.capacity} 人")
-    if approved_conflict(db, data.lab_id, data.date, data.start, data.end):
+    if approved_conflict(db, lab.id, data.date, data.start, data.end):
         raise BusinessException(code=409, message="该时段已有通过的预约，请选择其他时间")
+
+
+def create_reservation_in_transaction(
+    db: Session, current_user: User, data: ReservationCreateRequest
+) -> Reservation:
+    """Caller owns commit/rollback; lock applicant before room for Agent parity."""
+    reader = db.query(User).filter_by(id=current_user.id).populate_existing().with_for_update().first()
+    if reader is None or reader.status != 1:
+        raise BusinessException("账号不可用", 403)
+    lab = lock_space(db, data.lab_id)
+    validate_reservation(db, lab, data)
 
     reservation = Reservation(
         lab_id=data.lab_id,
@@ -73,7 +99,13 @@ def create_reservation(
         status="pending",
     )
     db.add(reservation)
-    db.commit()
+    db.flush()
+    return reservation
+
+
+def create_reservation(db: Session, current_user: User, data: ReservationCreateRequest) -> Reservation:
+    with write_transaction(db):
+        reservation = create_reservation_in_transaction(db, current_user, data)
     db.refresh(reservation)
     return reservation
 
@@ -169,7 +201,7 @@ def review_reservation(
         raise BusinessException(code=404, message="预约不存在")
 
     # 同一实验室的审核按顺序处理，防止并发通过重叠时段。
-    lab = db.query(Lab).filter(Lab.id == existing.lab_id).with_for_update().first()
+    lab = lock_space(db, existing.lab_id)
     reservation = (
         db.query(Reservation)
         .filter(Reservation.id == reservation_id)

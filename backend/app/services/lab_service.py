@@ -25,13 +25,14 @@ def list_labs(db: Session) -> list[Lab]:
     return db.query(Lab).order_by(Lab.code).all()
 
 
-def get_lab_or_404(db: Session, lab_id: int) -> Lab:
+def get_lab_or_404(db: Session, lab_id: int, *, for_update=False) -> Lab:
     """按 id 取实验室，取不到就报错
 
     新增/修改设备时也用它校验 lab_id：外键约束虽然也会拦下不存在的 lab_id，
     但那抛出来的是 IntegrityError（500），这里能给出一句人话（404）。
     """
-    lab = db.query(Lab).filter(Lab.id == lab_id).first()
+    query = db.query(Lab).filter(Lab.id == lab_id).populate_existing()
+    lab = (query.with_for_update() if for_update else query).first()
     if not lab:
         raise BusinessException(code=404, message="学习空间不存在")
     return lab
@@ -112,7 +113,7 @@ def create_lab(db: Session, data: LabCreateRequest) -> Lab:
 
 def update_lab(db: Session, lab_id: int, data: LabUpdateRequest) -> Lab:
     """修改实验室（全量更新）"""
-    lab = get_lab_or_404(db, lab_id)
+    lab = get_lab_or_404(db, lab_id, for_update=True)
     ensure_code_available(db, data.code, exclude_lab_id=lab_id)
 
     for field, value in data.model_dump().items():
@@ -137,7 +138,7 @@ def delete_lab(db: Session, lab_id: int) -> int:
     返回值只统计设备记录的条数（"种"），不是把 total 加起来得到的台数——
     具体文案由 api 层拼。
     """
-    lab = get_lab_or_404(db, lab_id)
+    lab = get_lab_or_404(db, lab_id, for_update=True)
     if db.query(Reservation.id).filter(Reservation.lab_id == lab_id).first():
         raise BusinessException(code=409, message="学习空间已有预约记录，不能删除")
 
