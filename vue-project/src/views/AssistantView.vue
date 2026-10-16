@@ -4,6 +4,7 @@ import { chatApi } from '@/aiApi'
 import { getKnowledgeSourceApi } from '@/api/knowledgeApi'
 import { buildChatHistory, retrievalLabel } from '@/utils/chatConversation'
 import BookBorrowAgent from '@/components/BookBorrowAgent.vue'
+import SpaceReservationAgent from '@/components/SpaceReservationAgent.vue'
 
 const input = ref('')
 const thinking = ref(false)
@@ -128,7 +129,7 @@ async function openSource(source) {
 </script>
 
 <template>
-  <div class="assistant-page" :class="{ 'borrow-mode': mode === 'borrow' }">
+  <div class="assistant-page" :class="{ 'borrow-mode': ['borrow', 'reservation'].includes(mode) }">
     <section class="chat-panel surface">
       <header class="chat-header">
         <div class="ai-avatar">
@@ -148,9 +149,10 @@ async function openSource(source) {
           <el-option label="普通聊天" value="chat" />
           <el-option label="知识库问答" value="knowledge" />
           <el-option label="图书借阅助手" value="borrow" />
+          <el-option label="空间预约助手" value="reservation" />
         </el-select>
         <button
-          v-if="mode !== 'borrow'"
+          v-if="!['borrow', 'reservation'].includes(mode)"
           class="clear-chat"
           title="新建对话"
           :disabled="thinking"
@@ -161,6 +163,7 @@ async function openSource(source) {
       </header>
 
       <BookBorrowAgent v-if="mode === 'borrow'" />
+      <SpaceReservationAgent v-else-if="mode === 'reservation'" />
       <template v-else>
         <div ref="chatBody" class="chat-body">
           <div class="day-divider"><span>今天</span></div>
@@ -241,7 +244,7 @@ async function openSource(source) {
       </template>
     </section>
 
-    <aside v-if="mode !== 'borrow'" class="agent-sidebar">
+    <aside v-if="!['borrow', 'reservation'].includes(mode)" class="agent-sidebar">
       <section class="agent-trace surface">
         <div class="side-title">
           <div>

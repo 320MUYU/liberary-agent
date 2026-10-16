@@ -28,3 +28,13 @@ export const selectReturnLoan = (id, loanId) =>
 
 export const getLoanPage = (id, page) =>
   request({ url: `${base}/${encodeURIComponent(id)}/loans-page`, method: 'post', data: { page } })
+
+export const selectReservationSpace = (id, spaceId) =>
+  request({
+    url: `${base}/${encodeURIComponent(id)}/select-space`,
+    method: 'post',
+    data: { space_id: spaceId }
+  })
+
+export const getSpacePage = (id, page) =>
+  request({ url: `${base}/${encodeURIComponent(id)}/spaces-page`, method: 'post', data: { page } })
