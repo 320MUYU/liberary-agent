@@ -51,8 +51,9 @@ def _inventory(db: Session, book_ids: list[int]) -> dict[int, tuple[int, int]]:
 
 def _response(book: Book, counts: tuple[int, int]) -> BookResponse:
     response = BookResponse.model_validate(book)
-    response.total_copies = counts[0]
-    response.available_copies = counts[1] if book.is_active else 0
+    response.total_copies = int(counts[0])
+    # MySQL SUM(integer) returns Decimal; assignment does not revalidate Pydantic fields.
+    response.available_copies = int(counts[1]) if book.is_active else 0
     return response
 
 

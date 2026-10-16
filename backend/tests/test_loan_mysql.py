@@ -25,7 +25,7 @@ from app.models.books import Book
 from app.models.loans import Loan
 from app.models.users import User
 from app.schemas.loan import BorrowConfirmRequest, LoanRequest
-from app.services import loan_service
+from app.services import book_service, loan_service
 
 
 @unittest.skipUnless(
@@ -139,6 +139,18 @@ class LoanMySQLConcurrencyTest(unittest.TestCase):
         self.assertEqual(
             self.db.query(Loan).filter(Loan.id.in_(ids), Loan.active_copy_id.is_not(None)).count(), 1
         )
+
+    def test_mysql_inventory_contract_uses_integer_json_before_and_after_borrow(self):
+        loan, book = self.pending("integer-stock")
+        before = book_service.book_response(self.db, book).model_dump(mode="json")
+        self.assertIs(type(before["available_copies"]), int)
+        self.assertEqual(before["available_copies"], 1)
+        loan_service.confirm_borrow(self.db, self.admin, loan.id, BorrowConfirmRequest())
+        after = book_service.book_response(self.db, book).model_dump(mode="json")
+        self.assertIs(type(after["available_copies"]), int)
+        self.assertEqual(after["available_copies"], 0)
+        self.assertIs(type(after["total_copies"]), int)
+        self.assertEqual(after["total_copies"], 1)
 
     def test_two_books_for_same_reader_do_not_exceed_five(self):
         for number in range(4):

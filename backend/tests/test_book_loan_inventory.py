@@ -1,5 +1,7 @@
 import unittest
 from datetime import datetime, timedelta
+from decimal import Decimal
+from unittest.mock import patch
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
@@ -75,6 +77,15 @@ class BookLoanInventoryTest(unittest.TestCase):
             ))
         self.assertEqual(error.exception.code, 409)
         self.assertEqual(self.db.get(BookCopy, self.copy.id).barcode, 'INV-001')
+
+    def test_mysql_decimal_aggregates_are_serialized_as_integer_inventory(self):
+        # MySQL SUM(int) returns Decimal; public stock fields must still be JSON numbers.
+        with patch.object(book_service, '_inventory', return_value={
+            self.book.id: (1, Decimal('1'))
+        }):
+            payload = book_service.book_response(self.db, self.book).model_dump(mode='json')
+        self.assertIs(type(payload['available_copies']), int)
+        self.assertEqual(payload['available_copies'], 1)
 
 
 if __name__ == '__main__':
