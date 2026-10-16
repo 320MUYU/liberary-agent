@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import vm from 'node:vm'
+import * as library from '../src/utils/library.js'
 
 async function panel(overrides = {}) {
   let unmount
@@ -15,7 +16,11 @@ async function panel(overrides = {}) {
     }
   })
   const api = {
-    startBorrowRun: async () => ({ run_id: 'new-run', status: 'select_book', books: [{ id: 1 }] }),
+    startBorrowRun: async () => ({
+      run_id: 'new-run',
+      status: 'select_book',
+      books: [{ id: 1, is_active: true, available_copies: 1 }]
+    }),
     selectBorrowBook: async () => ({
       run_id: 'new-run',
       status: 'confirm_borrow',
@@ -35,6 +40,11 @@ async function panel(overrides = {}) {
       }
     },
     '@/api/agentApi': api,
+    '@/utils/library': library,
+    '@/api/knowledgeApi': {
+      getKnowledgeSourceApi:
+        overrides.getKnowledgeSourceApi || (async () => ({ text: '元数据原文' }))
+    },
     '@/auth': { getUserInfo: () => ({ id: 5 }) }
   }
   const source = await readFile(
@@ -43,7 +53,8 @@ async function panel(overrides = {}) {
   )
   const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1]
   const module = new vm.SourceTextModule(
-    script + '\nexport { query, run, busy, error, search, select, decide, refresh, restart }',
+    script +
+      '\nexport { query, run, busy, error, search, select, decide, refresh, restart, openSource, sourceContent, sourceError }',
     { context }
   )
   await module.link(
@@ -118,4 +129,55 @@ test('leaving page ignores late response and empty searches make no request', as
   resolve({ status: 'select_book' })
   await pending
   assert.equal(state.run.value, null)
+})
+
+test('no stock books remain visible but cannot be selected; refresh restores evidence', async () => {
+  let selected = 0
+  const book = {
+    id: 7,
+    is_active: true,
+    total_copies: 0,
+    available_copies: 0,
+    match_reasons: ['分类：历史图书'],
+    sources: [{ chunk_id: 9 }]
+  }
+  const { state } = await panel({
+    startBorrowRun: async () => ({ status: 'select_book', books: [book] }),
+    selectBorrowBook: async () => {
+      selected++
+      return {}
+    },
+    getBorrowRun: async () => ({
+      status: 'select_book',
+      books: [book],
+      degraded: ['vector_unavailable']
+    })
+  })
+  state.query.value = '历史'
+  await state.search()
+  await state.select(7)
+  assert.equal(selected, 0)
+  await state.refresh()
+  assert.equal(state.run.value.books[0].sources[0].chunk_id, 9)
+  assert.equal(state.run.value.degraded[0], 'vector_unavailable')
+})
+
+test('source preview double click is bounded and disabled sources show an error', async () => {
+  let calls = 0
+  let reject
+  const { state } = await panel({
+    getKnowledgeSourceApi: () => {
+      calls++
+      return new Promise((_, fail) => {
+        reject = fail
+      })
+    }
+  })
+  const pending = state.openSource({ chunk_id: 9 })
+  await state.openSource({ chunk_id: 9 })
+  assert.equal(calls, 1)
+  reject(Error('来源已停用'))
+  await pending
+  assert.equal(state.sourceContent.value, null)
+  assert.equal(state.sourceError.value, '来源已停用')
 })

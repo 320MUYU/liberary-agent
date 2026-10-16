@@ -8,11 +8,17 @@ import {
   retryBorrowRun
 } from '@/api/agentApi'
 import { getUserInfo } from '@/auth'
+import { getKnowledgeSourceApi } from '@/api/knowledgeApi'
+import { bookAvailability, canRequestLoan, discoveryDegradation } from '@/utils/library'
 
 const query = ref('')
 const run = ref(null)
 const busy = ref(false)
 const error = ref('')
+const sourceDialog = ref(false)
+const sourceLoading = ref(false)
+const sourceContent = ref(null)
+const sourceError = ref('')
 const storageKey = `library-borrow-run-${getUserInfo()?.id}`
 const runId = ref(sessionStorage.getItem(storageKey) || '')
 let active = true
@@ -47,7 +53,24 @@ async function search() {
 
 async function select(bookId) {
   if (run.value?.status !== 'select_book') return
+  if (!canRequestLoan(run.value.books.find((book) => book.id === bookId))) return
   await perform(() => selectBorrowBook(runId.value, bookId))
+}
+
+async function openSource(source) {
+  if (sourceLoading.value) return
+  sourceDialog.value = true
+  sourceLoading.value = true
+  sourceContent.value = null
+  sourceError.value = ''
+  try {
+    const content = await getKnowledgeSourceApi(source.chunk_id)
+    if (active) sourceContent.value = content
+  } catch (failure) {
+    if (active) sourceError.value = failure.message || '来源已停用或暂时不可用。'
+  } finally {
+    if (active) sourceLoading.value = false
+  }
 }
 
 async function decide(confirmed) {
@@ -90,7 +113,7 @@ onMounted(refresh)
       <el-input
         v-model="query"
         aria-label="找书需求"
-        placeholder="例如：帮我找 Python 入门的书"
+        placeholder="例如：找多智能体相关的书，或推荐一些历史书"
         maxlength="1000"
         :disabled="busy || !!runId"
       />
@@ -104,6 +127,13 @@ onMounted(refresh)
     </form>
     <p v-if="busy" role="status">正在处理，请稍候…</p>
     <el-alert v-if="error" :title="error" type="warning" :closable="false" show-icon />
+    <el-alert
+      v-if="run?.degraded?.length"
+      :title="discoveryDegradation(run.degraded)"
+      type="warning"
+      :closable="false"
+      show-icon
+    />
     <div v-if="runId" class="borrow-controls">
       <el-button :disabled="busy" @click="refresh">刷新任务状态</el-button>
       <el-button
@@ -122,8 +152,27 @@ onMounted(refresh)
           <p>{{ book.author }} · {{ book.publisher || '出版社未登记' }}</p>
           <p v-if="book.isbn">ISBN {{ book.isbn }}</p>
           <p v-if="book.publication_year">{{ book.publication_year }} 年出版</p>
-          <p class="stock">当前可借 {{ book.available_copies }} 册</p>
-          <el-button :disabled="busy || book.available_copies < 1" @click="select(book.id)"
+          <p class="stock">{{ bookAvailability(book) }}</p>
+          <p class="muted">馆藏在查询或刷新时更新，提交时再次核验。</p>
+          <div v-if="book.match_reasons?.length || book.sources?.length" class="book-evidence">
+            <strong>匹配依据</strong>
+            <p v-for="reason in book.match_reasons" :key="reason">{{ reason }}</p>
+            <div v-for="source in book.sources" :key="source.chunk_id" class="book-source">
+              <p>{{ source.excerpt }}</p>
+              <el-button text :disabled="sourceLoading" @click="openSource(source)"
+                >查看来源原文</el-button
+              >
+            </div>
+            <p class="muted">依据为已登记的书目元数据，不代表书籍正文或适读年龄评估。</p>
+          </div>
+          <a
+            v-if="book.source?.url"
+            :href="book.source.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            >查看来源版次</a
+          >
+          <el-button :disabled="busy || !canRequestLoan(book)" @click="select(book.id)"
             >选择这本书</el-button
           >
         </article>
@@ -153,6 +202,14 @@ onMounted(refresh)
         >查看我的借阅与最新进度 →</router-link
       >
     </section>
+    <el-dialog v-model="sourceDialog" title="书目来源原文" width="min(680px, 94vw)">
+      <p v-if="sourceLoading" role="status">正在读取来源…</p>
+      <el-alert v-if="sourceError" :title="sourceError" type="warning" :closable="false" />
+      <template v-if="sourceContent">
+        <h3>{{ sourceContent.title }} · 文档版本 {{ sourceContent.version }}</h3>
+        <pre class="source-text">{{ sourceContent.text }}</pre>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -213,6 +270,24 @@ onMounted(refresh)
 .muted {
   color: #6f7780;
   font-size: 13px;
+}
+.book-evidence {
+  margin: 12px 0;
+  font-size: 13px;
+}
+.book-source {
+  border-left: 2px solid #c7ad7b;
+  padding-left: 10px;
+  margin: 10px 0;
+}
+.source-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.borrow-book > a {
+  display: block;
+  margin: 12px 0;
 }
 @media (max-width: 600px) {
   .borrow-agent {

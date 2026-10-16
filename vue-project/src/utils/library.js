@@ -24,6 +24,16 @@ export function bookAvailability(book) {
   return '暂无可借副本'
 }
 
+export function discoveryDegradation(codes = []) {
+  const messages = {
+    knowledge_disabled: '知识库检索未启用，当前仅按分类和主题标签匹配',
+    vector_unavailable: '向量检索暂不可用，已使用关键词和元数据检索',
+    rerank_unavailable: '重排暂不可用，已使用融合排序',
+    knowledge_unavailable: '知识库检索暂不可用，当前仅按分类和主题标签匹配'
+  }
+  return [...new Set(codes)].map((code) => messages[code] || '部分检索服务不可用').join('；')
+}
+
 export function bookLanguages(source) {
   const names = { chi: '中文', zho: '中文', eng: '英语', fre: '法语', fra: '法语', jpn: '日语' }
   return source?.languages?.map((code) => names[code] || code).join(' / ') || '未提供'
