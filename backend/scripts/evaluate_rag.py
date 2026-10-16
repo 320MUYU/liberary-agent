@@ -72,6 +72,39 @@ def _record(case: dict, answer: dict, expected_ids: list[int], latency_ms: float
     }
 
 
+def calculate_retrieval_metrics(records: list[dict], k: int = 10) -> dict:
+    """Measure ranked retrieval independently of generation and citation validation.
+
+    IDs must use the same granularity (chunk or document) on both sides. Duplicate
+    results never fill rank slots. Service errors are misses, not correct refusals.
+    """
+    if type(k) is not int or k < 1:
+        raise ValueError("k 必须为正整数")
+    recalls, hits, reciprocal_ranks, false_positives = [], [], [], []
+    for record in records:
+        expected = set(record["expected_ids"])
+        ranked = list(dict.fromkeys(record["ranked_ids"]))[:k] if not record.get("error") else []
+        if expected:
+            matches = expected.intersection(ranked)
+            recalls.append(len(matches) / len(expected))
+            hits.append(bool(matches))
+            reciprocal_ranks.append(next((1 / rank for rank, identifier in enumerate(ranked, 1)
+                                          if identifier in expected), 0))
+        elif not record.get("error"):
+            false_positives.append(bool(ranked))
+    latencies = sorted(record["latency_ms"] for record in records)
+    average = lambda values: round(statistics.mean(values), 4) if values else None
+    return {
+        "total": len(records), "k": k,
+        "errors": sum(bool(record.get("error")) for record in records),
+        "recall_at_k": average(recalls), "hit_at_k": average(hits),
+        "mrr_at_k": average(reciprocal_ranks),
+        "no_answer_false_positive_rate": average(false_positives),
+        "latency_mean_ms": average(latencies),
+        "latency_p95_ms": latencies[math.ceil(0.95 * len(latencies)) - 1] if latencies else None,
+    }
+
+
 def calculate_metrics(records: list[dict]) -> dict:
     expected_retrieval = [record for record in records if record["expected_document_ids"]]
     hits = sum(bool(set(record["expected_document_ids"]) & set(record["actual_document_ids"])) for record in expected_retrieval)
