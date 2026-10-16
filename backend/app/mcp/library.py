@@ -6,12 +6,14 @@ from pydantic import Field, StrictBool
 from starlette.responses import JSONResponse
 
 from app.agent.actions import decide_borrow, decide_return
+from app.agent.reservation_actions import decide_reservation
 from app.agent.mcp_adapter import verify_token
 from app.agent.policy import RunBudget
 from app.agent.tools import execute_read_tool, error
 from app.common.exceptions import BusinessException
 from app.database import SessionLocal
 from app.schemas.loan import LoanStatus
+from app.services.space_discovery import SpaceConditions
 
 
 identity = ContextVar("library_mcp_identity", default=None)
@@ -45,7 +47,8 @@ def create_server(session_factory=SessionLocal):
 
     def read(name, arguments):
         claims = identity.get()
-        required = "loans:read" if name in {"list_my_loans", "get_my_loan"} else "catalogue:read"
+        required = "spaces:read" if name in {"search_spaces", "get_space"} else (
+            "loans:read" if name in {"list_my_loans", "get_my_loan"} else "catalogue:read")
         if not claims or claims.get("scope") != required:
             return error("403", "工具权限不足")
         with session_factory() as db:
@@ -74,6 +77,22 @@ def create_server(session_factory=SessionLocal):
         return read("get_my_loan", {"loan_id": loan_id})
 
     @server.tool()
+    async def search_spaces(conditions: SpaceConditions, keyword: str = "",
+                            page: Annotated[int, Field(strict=True, ge=1, le=10000)] = 1) -> dict[str, Any]:
+        """只读查询空间和指定时段可用性，不返回他人的预约信息。"""
+        return read("search_spaces", {"conditions": conditions.model_dump(mode="json"), "keyword": keyword, "page": page})
+
+    @server.tool()
+    async def get_space(conditions: SpaceConditions, space_id: Annotated[int, Field(strict=True, gt=0)]) -> dict[str, Any]:
+        """只读查询空间详情和指定时段状态。"""
+        return read("get_space", {"conditions": conditions.model_dump(mode="json"), "space_id": space_id})
+
+    @server.tool()
+    async def submit_reservation_decision(action_id: str, confirmed: StrictBool) -> dict[str, Any]:
+        """执行已绑定到具体预约操作的人工确认。"""
+        return submit("reservation", action_id, confirmed)
+
+    @server.tool()
     async def submit_borrow_decision(action_id: str, confirmed: StrictBool) -> dict[str, Any]:
         """执行服务端已授权的具体确认；普通查询凭证不能调用。"""
         return submit("borrow", action_id, confirmed)
@@ -90,7 +109,8 @@ def create_server(session_factory=SessionLocal):
             return error("403", "缺少本次操作的确认授权")
         try:
             with session_factory() as db:
-                receipt = (decide_borrow if action_type == "borrow" else decide_return)(db, int(claims["sub"]), action_id, confirmed)
+                handler = {"borrow": decide_borrow, "return": decide_return, "reservation": decide_reservation}[action_type]
+                receipt = handler(db, int(claims["sub"]), action_id, confirmed)
                 return {"ok": True, "data": receipt}
         except BusinessException as exc:
             return error(str(exc.code), exc.message)

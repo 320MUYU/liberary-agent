@@ -10,12 +10,14 @@ from sqlalchemy import or_, update
 from sqlalchemy.exc import IntegrityError
 
 from app.agent.actions import decide_borrow, prepare_borrow, decide_return, prepare_return
+from app.agent.reservation_actions import draft_action, prepare_reservation, decide_reservation, receipt as reservation_receipt
 from app.agent.graph import build_graph
 from app.agent.policy import RunBudget
 from app.agent.tools import execute_read_tool, tool_definitions, allowed_tools, public_loan, error
 from app.common.exceptions import BusinessException
 from app.config import settings
-from app.models.agent import AgentRun
+from app.models.agent import AgentRun, AgentReservationAction
+from app.services.space_discovery import SpaceConditions, get_space
 from app.services.book_discovery import refresh_books
 from app.services.ai_services import _create_chat_model
 from app.services import loan_service
@@ -45,9 +47,11 @@ def owned_run(db, user_id, run_id):
     return run
 
 
-def start_run(db, user_id, request_id, query, task_type="borrow"):
-    if task_type not in {"borrow", "my_loans", "return"}:
+def start_run(db, user_id, request_id, query, task_type="borrow", conditions=None):
+    if task_type not in {"borrow", "my_loans", "return", "reservation"}:
         raise BusinessException("不支持的任务类型", 422)
+    if task_type == "reservation":
+        conditions = SpaceConditions.model_validate(conditions)
     run = db.query(AgentRun).filter_by(run_id=request_id).first()
     if run is not None:
         owned_run(db, user_id, request_id)
@@ -56,6 +60,8 @@ def start_run(db, user_id, request_id, query, task_type="borrow"):
     else:
         db.add(AgentRun(run_id=request_id, user_id=user_id, query=query, task_type=task_type,
             expires_at=datetime.now() + timedelta(hours=24)))
+        if task_type == "reservation":
+            db.add(draft_action(user_id, request_id, conditions))
         try:
             db.commit()
         except IntegrityError:
@@ -63,6 +69,10 @@ def start_run(db, user_id, request_id, query, task_type="borrow"):
             run = owned_run(db, user_id, request_id)
             if run.query != query or run.task_type != task_type:
                 raise BusinessException("任务内容冲突", 409)
+    if task_type == "reservation":
+        action = db.query(AgentReservationAction).filter_by(run_id=request_id, user_id=user_id).first()
+        if action is None or action.conditions != conditions.model_dump(mode="json"):
+            raise BusinessException("任务编号已绑定其他预约条件", 409)
     return run_graph(db, user_id, request_id, "retry")
 
 
@@ -72,6 +82,22 @@ def graph_view(run_id, snapshot, db=None, user_id=None):
             value = dict(task.interrupts[0].value)
             if value["kind"] == "select_book" and db is not None:
                 value["books"] = refresh_books(db, value["books"])
+            if value["kind"] == "select_space" and db is not None:
+                db.rollback()
+                page = snapshot.values.get("space_page", value)
+                conditions = SpaceConditions.model_validate(snapshot.values["conditions"])
+                rooms = []
+                checked_at = page.get("checked_at")
+                for room in page["spaces"]:
+                    try:
+                        fresh = get_space(db, conditions, room["id"])
+                        rooms.extend(fresh["spaces"])
+                        checked_at = fresh["checked_at"]
+                    except BusinessException as exc:
+                        if exc.code != 404:
+                            raise
+                value.update({key: val for key, val in page.items() if key not in {"kind", "spaces"}})
+                value.update(spaces=rooms, checked_at=checked_at)
             if value["kind"] == "select_loan" and db is not None:
                 db.rollback()
                 user = db.get(User, user_id)
@@ -85,6 +111,11 @@ def graph_view(run_id, snapshot, db=None, user_id=None):
                 value.update(loans=loans, loan_page={**snapshot.values.get("loan_page", value["loan_page"]), "loans": loans})
             return {"run_id": run_id, "status": value["kind"], **{k: v for k, v in value.items() if k != "kind"}}
     state = snapshot.values
+    if db is not None and state.get("task_type") == "reservation" and state.get("receipt", {}).get("reservation_id"):
+        db.rollback()
+        receipt = reservation_receipt(db, user_id, state["receipt"]["reservation_id"])
+        return {"run_id": run_id, "status": receipt["status"], "receipt": receipt,
+            "action": state.get("action"), "message": receipt["message"]}
     if db is not None and state.get("task_type", "borrow") != "borrow" and state.get("status") in {"return_pending", "returned"}:
         db.rollback()
         user = db.get(User, user_id)
@@ -103,6 +134,12 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
     run = owned_run(db, user_id, run_id)
     query = run.query
     task_type = run.task_type
+    conditions = None
+    if task_type == "reservation":
+        action = db.query(AgentReservationAction).filter_by(run_id=run_id, user_id=user_id).first()
+        if action is None:
+            raise BusinessException("预约任务缺少条件，请重新查询", 409)
+        conditions = SpaceConditions.model_validate(action.conditions)
     token = str(uuid4())
     now = datetime.now()
     acquired = db.execute(update(AgentRun).where(AgentRun.run_id == run_id,
@@ -120,6 +157,12 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
                     if name not in allowed_tools(task_type):
                         budget.consume("tool")
                         return error("tool_not_allowed", "当前任务不支持该工具")
+                    if task_type == "reservation":
+                        args = dict(args)
+                        if "conditions" in args and SpaceConditions.model_validate(args["conditions"]) != conditions:
+                            budget.consume("tool")
+                            return error("invalid_conditions", "模型不能改变已确认预约条件")
+                        args["conditions"] = conditions.model_dump(mode="json")
                     if settings.AGENT_TOOL_TRANSPORT == "mcp":
                         from app.agent.mcp_adapter import read_tool
                         return read_tool(user_id, name, args, budget)
@@ -130,17 +173,20 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
             def execute(action_id, confirmed):
                 if settings.AGENT_TOOL_TRANSPORT == "mcp":
                     from app.agent.mcp_adapter import submit_decision
-                    return submit_decision(user_id, action_id, confirmed, action_type="borrow" if task_type == "borrow" else "return")
-                return (decide_borrow if task_type == "borrow" else decide_return)(db, user_id, action_id, confirmed)
+                    return submit_decision(user_id, action_id, confirmed, action_type=("reservation" if task_type == "reservation" else ("borrow" if task_type == "borrow" else "return")))
+                handler = decide_reservation if task_type == "reservation" else (decide_borrow if task_type == "borrow" else decide_return)
+                return handler(db, user_id, action_id, confirmed)
 
             graph = build_graph(saver, lambda messages: call_model(messages, budget) if task_type == "borrow" else call_model(messages, budget, task_type),
                 read,
                 prepare=lambda book_id: prepare_borrow(db, user_id, run_id, book_id),
-                execute=execute, prepare_return=lambda loan_id: prepare_return(db, user_id, run_id, loan_id))
+                execute=execute, prepare_return=lambda loan_id: prepare_return(db, user_id, run_id, loan_id),
+                prepare_reservation=lambda space_id: prepare_reservation(db, user_id, run_id, space_id, conditions))
             config = {"configurable": {"thread_id": run_id}, "recursion_limit": 24}
             snapshot = graph.get_state(config)
             def current_view():
-                return {**graph_view(run_id, graph.get_state(config), db, user_id), "task_type": task_type}
+                return {**graph_view(run_id, graph.get_state(config), db, user_id), "task_type": task_type,
+                    **({"conditions": conditions.model_dump(mode="json")} if conditions is not None else {})}
             view = current_view()
             if operation == "view":
                 return view
@@ -153,6 +199,23 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
                     raise BusinessException("当前任务不允许选择书目，请刷新", 409)
                 if payload["book_id"] not in {b["id"] for b in view["books"]}:
                     raise BusinessException("请选择本次查找返回的书目", 409)
+                inputs = Command(resume=payload)
+            elif operation in {"spaces_page", "select_space"}:
+                if task_type != "reservation":
+                    raise BusinessException("当前任务不支持空间操作", 409)
+                if view["status"] != "select_space":
+                    if operation == "select_space" and (view.get("action") or {}).get("space", {}).get("id") == payload["space_id"]:
+                        return view
+                    raise BusinessException("当前任务不允许选择或翻页，请刷新", 409)
+                if operation == "spaces_page":
+                    result = read("search_spaces", {"page": payload["page"], "keyword": view.get("keyword", "")})
+                    if not result.get("ok"):
+                        raise BusinessException("空间查询暂不可用", 503)
+                    graph.update_state(config, {"spaces": result["data"]["spaces"], "space_page": result["data"], "pending_tools": []}, as_node="think")
+                    graph.invoke(None, config)
+                    return current_view()
+                if payload["space_id"] not in {room["id"] for room in view["spaces"] if room["can_reserve"]}:
+                    raise BusinessException("请选择本页可申请的空间", 409)
                 inputs = Command(resume=payload)
             elif operation == "loans_page":
                 if task_type == "borrow" or view["status"] != "select_loan":
@@ -180,18 +243,21 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
                 action = view.get("action") or {}
                 if action.get("id") != payload["action_id"]:
                     raise BusinessException("确认内容不匹配", 409)
-                if view["status"] in {"pending", "return_pending", "returned", "cancelled"}:
+                if view["status"] in {"pending", "return_pending", "returned", "cancelled", "reservation_pending", "reservation_approved", "reservation_rejected", "reservation_cancelled"}:
                     expected = view["status"] != "cancelled"
                     if payload["confirmed"] != expected:
                         raise BusinessException("操作已完成，请查看我的借阅", 409)
                     return view
-                if view["status"] != ("confirm_borrow" if task_type == "borrow" else "confirm_return"):
+                expected_status = "confirm_reservation" if task_type == "reservation" else ("confirm_borrow" if task_type == "borrow" else "confirm_return")
+                if view["status"] != expected_status:
                     raise BusinessException("任务尚未到确认阶段，请刷新", 409)
                 inputs = Command(resume=payload)
             else:
                 if any(task.interrupts for task in snapshot.tasks) or (snapshot.values and not snapshot.next):
                     return view
                 inputs = None if snapshot.values else {"query": query, "task_type": task_type, "books": [], "messages": [], "model_calls": 0, "tool_calls": 0}
+                if inputs is not None and conditions is not None:
+                    inputs["conditions"] = conditions.model_dump(mode="json")
             graph.invoke(inputs, config)
             return current_view()
     except BusinessException:

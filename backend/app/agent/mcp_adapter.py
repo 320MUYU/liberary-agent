@@ -24,7 +24,7 @@ def signing_key():
 
 
 def issue_token(user_id, action_id=None, confirmed=None, *, action_type="borrow", read_scope="catalogue:read"):
-    if action_type not in {"borrow", "return"} or read_scope not in {"catalogue:read", "loans:read"}:
+    if action_type not in {"borrow", "return", "reservation"} or read_scope not in {"catalogue:read", "loans:read", "spaces:read"}:
         raise ValueError("Invalid capability")
     claims = {"sub": str(user_id), "aud": AUDIENCE, "iss": ISSUER,
               "iat": int(time.time()), "exp": int(time.time()) + 90, "scope": read_scope}
@@ -68,9 +68,10 @@ def read_tool(user_id, name, arguments, budget):
         budget.consume("tool")
         if name not in SCHEMAS:
             return error("tool_not_allowed", "不支持的工具")
-        arguments = SCHEMAS[name].model_validate(arguments).model_dump()
+        arguments = SCHEMAS[name].model_validate(arguments).model_dump(mode="json")
         result = asyncio.run(_call(user_id, name, arguments, min(15, budget.remaining()),
-            read_scope="loans:read" if name in {"list_my_loans", "get_my_loan"} else "catalogue:read"))
+            read_scope=("spaces:read" if name in {"search_spaces", "get_space"} else
+                ("loans:read" if name in {"list_my_loans", "get_my_loan"} else "catalogue:read"))))
         budget.remaining()
         return result
     except ValidationError:
@@ -83,7 +84,7 @@ def read_tool(user_id, name, arguments, budget):
 
 def submit_decision(user_id, action_id, confirmed, *, action_type="borrow"):
     try:
-        if action_type not in {"borrow", "return"}:
+        if action_type not in {"borrow", "return", "reservation"}:
             raise ValueError("Invalid action type")
         result = asyncio.run(_call(user_id, "submit_" + action_type + "_decision",
             {"action_id": action_id, "confirmed": confirmed}, 15, action_id, confirmed, action_type=action_type))

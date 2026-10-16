@@ -12,6 +12,7 @@ from app.models.users import User
 from app.services import book_service, loan_service
 from app.schemas.loan import LoanStatus
 from app.services.book_discovery import discover_books, public_book
+from app.services.space_discovery import SpaceConditions, discover_spaces, get_space
 
 
 class SearchBooks(BaseModel):
@@ -38,9 +39,25 @@ class GetMyLoan(BaseModel):
     loan_id: int = Field(gt=0, strict=True)
 
 
+class SearchSpaces(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    conditions: SpaceConditions
+    keyword: str = Field(default="", max_length=100)
+    page: int = Field(default=1, ge=1, le=10000, strict=True)
+
+
+class GetSpace(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    conditions: SpaceConditions
+    space_id: int = Field(gt=0, strict=True)
+
+
 SCHEMAS = {"search_books": SearchBooks, "get_book": GetBook,
-           "list_my_loans": ListMyLoans, "get_my_loan": GetMyLoan}
+           "list_my_loans": ListMyLoans, "get_my_loan": GetMyLoan,
+           "search_spaces": SearchSpaces, "get_space": GetSpace}
 DESCRIPTIONS = {
+    "search_spaces": "按空间名称、房间号、馆区、类型或设施关键词查询空间，每页6条；keyword留空查全部。conditions必须照抄已确认条件，不得改日期、时间、人数或用途。返回指定时段可用性；只读，不提交预约。",
+    "get_space": "查询具体空间及绑定时段可用性。conditions照抄确认条件。只读，不提交预约。",
     "search_books": "查询上架书目，每页6本。具体书名、作者、ISBN用exact；主题推荐用topic，融合分类、标签和已发布元数据知识库。auto优先精确。返回匹配依据、来源及实时馆藏，降级会标记。只读。",
     "get_book": "查询已上架书目的详细信息和当前可借册数。只读，不占库存。",
     "list_my_loans": "查询当前登录读者的实际借阅记录，每页6条。可按书名、作者、ISBN关键词和状态过滤；不要把查询我的借阅等请求用语放入关键词。borrowed为借阅中，return_pending为待确认归还，returned为已归还。只读。",
@@ -49,6 +66,8 @@ DESCRIPTIONS = {
 
 
 def allowed_tools(task_type="borrow"):
+    if task_type == "reservation":
+        return {"search_spaces", "get_space"}
     return {"search_books", "get_book"} if task_type == "borrow" else {"list_my_loans", "get_my_loan"}
 
 
@@ -80,6 +99,10 @@ def execute_read_tool(db, user_id, name, arguments, budget):
                 deadline=time.monotonic() + min(10, budget.remaining()))
         elif name == "get_book":
             data = {"books": [public_book(book_service.get_book_detail(db, args.book_id))]}
+        elif name == "search_spaces":
+            data = discover_spaces(db, args.conditions, args.keyword, args.page)
+        elif name == "get_space":
+            data = get_space(db, args.conditions, args.space_id)
         else:
             user = db.get(User, user_id)
             if name == "list_my_loans":

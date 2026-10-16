@@ -30,3 +30,17 @@ class AgentAction(Base):
     status: Mapped[str] = mapped_column(String(20), default="prepared")
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     loan_id: Mapped[int | None] = mapped_column(ForeignKey("book_loans.id"))
+
+
+class AgentReservationAction(Base):
+    __tablename__ = "agent_reservation_actions"
+
+    action_id: Mapped[str] = mapped_column(String(36), unique=True)
+    run_id: Mapped[str] = mapped_column(String(36), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    conditions: Mapped[dict] = mapped_column(JSON)
+    lab_id: Mapped[int | None] = mapped_column(ForeignKey("labs.id"))
+    snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    reservation_id: Mapped[int | None] = mapped_column(ForeignKey("reservations.id"))
