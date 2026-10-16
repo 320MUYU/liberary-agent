@@ -46,8 +46,9 @@ class FlowStore:
         for identifier, metadata in zip(ids, metadatas):
             self.rows[identifier] = {"id": identifier, "distance": 0.1, "metadata": metadata}
 
-    def query(self, collection, embedding, limit=8):
-        return list(self.rows.values())[:limit]
+    def query(self, collection, embedding, limit=8, *, version_ids=None):
+        return [row for row in self.rows.values()
+                if version_ids is None or int(row["metadata"]["version_id"]) in version_ids][:limit]
 
     def delete_version(self, collection, version_id):
         self.rows = {

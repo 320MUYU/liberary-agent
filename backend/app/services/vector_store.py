@@ -173,9 +173,16 @@ class ChromaVectorStore:
         except Exception:
             raise BusinessException(code=503, message="知识库索引服务暂时不可用，请稍后重试") from None
 
-    def query(self, collection: str, embedding: list[float], limit: int = 8) -> list[dict]:
+    def query(self, collection: str, embedding: list[float], limit: int = 8, *, version_ids=None) -> list[dict]:
         if not _valid_vector(embedding) or type(limit) is not int or not 1 <= limit <= 100:
             raise BusinessException(code=422, message="知识库检索参数无效")
+        filters = {}
+        if version_ids is not None:
+            if not isinstance(version_ids, list) or any(type(value) is not int or value < 1 for value in version_ids):
+                raise BusinessException(code=422, message="知识库版本范围无效")
+            if not version_ids:
+                return []
+            filters["where"] = {"version_id": {"$in": [str(value) for value in dict.fromkeys(version_ids)]}}
         try:
             target = self._get_client().get_collection(name=collection, embedding_function=None)
         except Exception as exc:
@@ -185,7 +192,7 @@ class ChromaVectorStore:
         try:
             self._check_cosine(target)
             raw = target.query(
-                query_embeddings=[embedding], n_results=limit, include=["distances", "metadatas"]
+                query_embeddings=[embedding], n_results=limit, include=["distances", "metadatas"], **filters
             )
             ids = raw["ids"][0]
             distances = raw["distances"][0]

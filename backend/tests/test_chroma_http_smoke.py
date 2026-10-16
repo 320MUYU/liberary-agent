@@ -144,6 +144,9 @@ class ChromaHttpSmokeTest(unittest.TestCase):
         self.assertEqual(matches[0]["id"], "chunk-1")
         self.assertAlmostEqual(matches[0]["distance"], 0.0, places=6)
         self.assertEqual(matches[0]["metadata"]["version_id"], "1")
+        scoped = store.query("library-smoke", [1.0, 0.0], limit=1, version_ids=[2])
+        self.assertEqual([row["id"] for row in scoped], ["chunk-2"])
+        self.assertEqual(store.query("library-smoke", [1.0, 0.0], version_ids=[]), [])
 
         self.stop_server()
         self.start_server()

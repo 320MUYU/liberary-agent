@@ -149,7 +149,7 @@ class _OfflineStore:
     def __init__(self, vector_ids):
         self.vector_ids = vector_ids
 
-    def query(self, collection, embedding, limit=8):
+    def query(self, collection, embedding, limit=8, *, version_ids=None):
         rows = [
             {"id": identifier, "distance": 0.1 if score else 0.95, "metadata": {}}
             for identifier, score in zip(self.vector_ids, embedding)

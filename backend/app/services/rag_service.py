@@ -101,6 +101,17 @@ def _published_chunks(db: Session, vector_ids: list[str], fingerprint: str) -> d
     return {chunk.vector_id: (chunk, version, document) for chunk, version, document in db.execute(statement)}
 
 
+def published_version_ids(db: Session, fingerprint: str) -> list[int]:
+    return list(db.scalars(select(KnowledgeVersion.id).join(
+        KnowledgeDocument, KnowledgeVersion.document_id == KnowledgeDocument.id,
+    ).where(
+        KnowledgeDocument.status == "published",
+        KnowledgeDocument.active_version_id == KnowledgeVersion.id,
+        KnowledgeVersion.status == "ready",
+        KnowledgeVersion.embedding_profile == fingerprint,
+    ).order_by(KnowledgeVersion.id)))
+
+
 def _evidence(rows: list[dict], published: dict) -> tuple[list[ChatSource], str]:
     sources = []
     context = []
@@ -180,7 +191,8 @@ def knowledge_chat(
         store = vector_store if vector_store is not None else ChromaVectorStore(
             timeout=min(getattr(settings, "CHROMA_TIMEOUT_SECONDS", 10), _remaining(deadline) / 3)
         )
-        rows = store.query(profile["collection_name"], embedding, limit=getattr(settings, "RAG_CANDIDATES", 8))
+        rows = store.query(profile["collection_name"], embedding, limit=getattr(settings, "RAG_CANDIDATES", 8),
+                           version_ids=published_version_ids(db, profile["fingerprint"]))
         _remaining(deadline)
         identifiers = [row["id"] for row in rows if isinstance(row.get("id"), str)]
         published = _published_chunks(db, identifiers, profile["fingerprint"])

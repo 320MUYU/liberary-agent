@@ -58,6 +58,15 @@ class FakeClient:
 
 
 class VectorStoreTest(unittest.TestCase):
+    def test_version_scope_is_applied_before_nearest_neighbors(self):
+        self.store.query("library-test", [1.0, 0.0], limit=2, version_ids=[5, 7])
+        self.assertEqual(self.client.collection.queries[0]["where"],
+                         {"version_id": {"$in": ["5", "7"]}})
+
+    def test_empty_version_scope_never_searches_entire_collection(self):
+        self.assertEqual(self.store.query("library-test", [1.0], version_ids=[]), [])
+        self.assertEqual(self.client.gets, [])
+
     def setUp(self):
         self.client = FakeClient()
         self.store = ChromaVectorStore(client=self.client)

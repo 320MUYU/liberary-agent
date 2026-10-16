@@ -66,7 +66,7 @@ class FakeStore:
         self.error = error
         self.calls = []
 
-    def query(self, collection, embedding, limit=8):
+    def query(self, collection, embedding, limit=8, *, version_ids=None):
         self.calls.append((collection, embedding, limit))
         if self.error:
             raise self.error
@@ -74,6 +74,20 @@ class FakeStore:
 
 
 class RagChatTest(unittest.TestCase):
+    def test_draft_candidates_cannot_crowd_out_published_evidence(self):
+        _, draft, hidden = self.add_source(document_status="draft")
+        _, live, visible = self.add_source()
+
+        class ScopedStore:
+            def query(inner, collection, embedding, limit=8, *, version_ids=None):
+                self.assertEqual(version_ids, [live.id])
+                rows = [(draft.id, hidden), (live.id, visible)]
+                return [{"id": chunk.vector_id, "distance": 0.1, "metadata": {}}
+                        for version_id, chunk in rows if version_id in version_ids][:1]
+
+        response = self.ask(ScopedStore())
+        self.assertEqual(response.sources[0].chunk_id, visible.id)
+
     def setUp(self):
         self.engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(self.engine)
