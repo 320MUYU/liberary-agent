@@ -5,13 +5,23 @@ import {
   getBorrowRun,
   selectBorrowBook,
   decideBorrow,
-  retryBorrowRun
+  retryBorrowRun,
+  selectReturnLoan,
+  getLoanPage
 } from '@/api/agentApi'
 import { getUserInfo } from '@/auth'
 import { getKnowledgeSourceApi } from '@/api/knowledgeApi'
-import { bookAvailability, canRequestLoan, discoveryDegradation } from '@/utils/library'
+import {
+  bookAvailability,
+  canRequestLoan,
+  canRequestReturn,
+  discoveryDegradation,
+  LOAN_STATUSES,
+  formatLoanTime
+} from '@/utils/library'
 
 const query = ref('')
+const taskType = ref('borrow')
 const run = ref(null)
 const busy = ref(false)
 const error = ref('')
@@ -32,7 +42,10 @@ async function perform(operation) {
   error.value = ''
   try {
     const result = await operation()
-    if (active) run.value = result
+    if (active) {
+      run.value = result
+      if (result.task_type) taskType.value = result.task_type
+    }
   } catch (failure) {
     if (active) error.value = failure.message || '请求暂未完成，请刷新任务状态。'
   } finally {
@@ -41,20 +54,39 @@ async function perform(operation) {
 }
 
 async function search() {
-  if (busy.value || runId.value || !query.value.trim()) return
+  if (busy.value || runId.value || (taskType.value === 'borrow' && !query.value.trim())) return
   if (query.value.trim().length > 1000) {
     error.value = '查找描述不能超过1000字。'
     return
   }
   runId.value = crypto.randomUUID()
   sessionStorage.setItem(storageKey, runId.value)
-  await perform(() => startBorrowRun({ request_id: runId.value, query: query.value.trim() }))
+  await perform(() =>
+    startBorrowRun({
+      request_id: runId.value,
+      query:
+        query.value.trim() ||
+        (taskType.value === 'return' ? '查询我的借阅，我要申请归还' : '查询我的借阅'),
+      task_type: taskType.value
+    })
+  )
 }
 
 async function select(bookId) {
   if (run.value?.status !== 'select_book') return
   if (!canRequestLoan(run.value.books.find((book) => book.id === bookId))) return
   await perform(() => selectBorrowBook(runId.value, bookId))
+}
+
+async function selectLoan(loanId) {
+  if (run.value?.status !== 'select_loan') return
+  if (!canRequestReturn(run.value.loans.find((loan) => loan.id === loanId))) return
+  await perform(() => selectReturnLoan(runId.value, loanId))
+}
+
+async function changeLoanPage(page) {
+  if (run.value?.status !== 'select_loan') return
+  await perform(() => getLoanPage(runId.value, page))
 }
 
 async function openSource(source) {
@@ -74,7 +106,7 @@ async function openSource(source) {
 }
 
 async function decide(confirmed) {
-  if (run.value?.status !== 'confirm_borrow') return
+  if (!['confirm_borrow', 'confirm_return'].includes(run.value?.status)) return
   const actionId = run.value.action.id
   await perform(() => decideBorrow(runId.value, { action_id: actionId, confirmed }))
 }
@@ -89,7 +121,7 @@ async function retry() {
 
 async function restart() {
   if (busy.value) return
-  if (run.value?.status === 'confirm_borrow') {
+  if (['confirm_borrow', 'confirm_return'].includes(run.value?.status)) {
     await decide(false)
     if (run.value?.status !== 'cancelled') return
   }
@@ -105,15 +137,35 @@ onMounted(refresh)
 <template>
   <div class="borrow-agent">
     <div class="borrow-intro">
-      <span>找书 · 选择书目 · 确认申请</span>
-      <h3>告诉我，你想找什么书？</h3>
-      <p>查询实时馆藏。你确认后才提交借阅申请，借出仍由管理员办理。</p>
+      <span>找书借阅 · 我的借阅 · 申请归还</span>
+      <h3>{{ taskType === 'borrow' ? '告诉我，你想找什么书？' : '查看自己的借阅，准备下一步' }}</h3>
+      <p>
+        {{
+          taskType === 'borrow'
+            ? '查询实时馆藏。你确认后才提交借阅申请，借出仍由管理员办理。'
+            : '选择借阅中的记录并确认后提交归还申请；交还实体图书后，由管理员确认归还。'
+        }}
+      </p>
     </div>
+    <el-radio-group
+      v-model="taskType"
+      class="task-types"
+      aria-label="借阅助手任务"
+      :disabled="busy || !!runId"
+    >
+      <el-radio-button value="borrow">找书借阅</el-radio-button>
+      <el-radio-button value="my_loans">我的借阅</el-radio-button>
+      <el-radio-button value="return">申请归还</el-radio-button>
+    </el-radio-group>
     <form class="borrow-search" @submit.prevent="search">
       <el-input
         v-model="query"
         aria-label="找书需求"
-        placeholder="例如：找多智能体相关的书，或推荐一些历史书"
+        :placeholder="
+          taskType === 'borrow'
+            ? '例如：找多智能体相关的书，或推荐一些历史书'
+            : '可选：查询借阅中的《史记》；留空查询全部记录'
+        "
         maxlength="1000"
         :disabled="busy || !!runId"
       />
@@ -121,8 +173,8 @@ onMounted(refresh)
         native-type="submit"
         type="primary"
         :loading="busy"
-        :disabled="!!runId || !query.trim()"
-        >查找图书</el-button
+        :disabled="!!runId || (taskType === 'borrow' && !query.trim())"
+        >{{ taskType === 'borrow' ? '查找图书' : '查询我的借阅' }}</el-button
       >
     </form>
     <p v-if="busy" role="status">正在处理，请稍候…</p>
@@ -142,7 +194,7 @@ onMounted(refresh)
         @click="retry"
         >继续未完成任务</el-button
       >
-      <el-button :disabled="busy" @click="restart">重新找书</el-button>
+      <el-button :disabled="busy" @click="restart">开始新任务</el-button>
     </div>
     <section v-if="run?.status === 'select_book'" aria-label="可选书目">
       <p>{{ run.message }}</p>
@@ -178,6 +230,62 @@ onMounted(refresh)
         </article>
       </div>
     </section>
+    <section v-else-if="run?.status === 'select_loan'" aria-label="我的借阅记录">
+      <p>{{ run.message }}</p>
+      <p v-if="!run.loans.length" class="muted">当前没有符合条件的借阅记录。</p>
+      <div class="borrow-books">
+        <article v-for="loan in run.loans" :key="loan.id" class="borrow-book loan-card">
+          <h4>{{ loan.book_title }}</h4>
+          <el-tag :type="LOAN_STATUSES[loan.status]?.type || 'info'">{{
+            LOAN_STATUSES[loan.status]?.label || '状态待确认'
+          }}</el-tag>
+          <p>借阅编号：{{ loan.id }}</p>
+          <p>副本条码：{{ loan.barcode || '尚未分配' }}</p>
+          <p>借出时间：{{ formatLoanTime(loan.borrowed_at) }}</p>
+          <p>应还时间：{{ formatLoanTime(loan.due_at) }}</p>
+          <p v-if="loan.is_overdue" class="stock">已逾期，请尽快交还实体图书。</p>
+          <p v-if="loan.status === 'return_pending'" class="muted">
+            已申请归还，请交还实体图书并等待管理员确认。
+          </p>
+          <el-button :disabled="busy || !canRequestReturn(loan)" @click="selectLoan(loan.id)"
+            >申请归还这本书</el-button
+          >
+        </article>
+      </div>
+      <div class="borrow-controls" aria-label="借阅记录分页">
+        <el-button
+          :disabled="busy || run.loan_page.page <= 1"
+          @click="changeLoanPage(run.loan_page.page - 1)"
+          >上一页</el-button
+        >
+        <span>第 {{ run.loan_page.page }} 页 · 共 {{ run.loan_page.total }} 条</span>
+        <el-button
+          :disabled="busy || run.loan_page.page * run.loan_page.page_size >= run.loan_page.total"
+          @click="changeLoanPage(run.loan_page.page + 1)"
+          >下一页</el-button
+        >
+      </div>
+    </section>
+    <section
+      v-else-if="run?.status === 'confirm_return'"
+      class="borrow-confirm"
+      aria-label="确认归还申请"
+    >
+      <span>请核对本次归还</span>
+      <h3>{{ run.action.book.title }}</h3>
+      <p>借阅编号：{{ run.action.loan.id }}</p>
+      <p>副本条码：{{ run.action.loan.barcode || '未登记' }}</p>
+      <p>借出时间：{{ formatLoanTime(run.action.loan.borrowed_at) }}</p>
+      <p>应还时间：{{ formatLoanTime(run.action.loan.due_at) }}</p>
+      <p>{{ run.action.message }}</p>
+      <p class="muted">确认有效期10分钟；提交时重新检查记录归属和实际状态。</p>
+      <div class="borrow-controls">
+        <el-button type="primary" :disabled="busy" @click="decide(true)"
+          >确认提交归还申请</el-button
+        >
+        <el-button :disabled="busy" @click="decide(false)">取消本次操作</el-button>
+      </div>
+    </section>
     <section
       v-else-if="run?.status === 'confirm_borrow'"
       class="borrow-confirm"
@@ -196,9 +304,11 @@ onMounted(refresh)
     </section>
     <section v-else-if="run" class="borrow-result" role="status">
       <h3 v-if="run.status === 'pending'">借阅申请已提交 · 待管理员确认</h3>
+      <h3 v-else-if="run.status === 'return_pending'">归还申请已提交 · 待管理员确认归还</h3>
+      <h3 v-else-if="run.status === 'returned'">管理员已确认归还</h3>
       <p>{{ run.message }}</p>
       <p v-if="run.receipt?.loan_id">申请编号：{{ run.receipt.loan_id }}</p>
-      <router-link v-if="run.status === 'pending'" to="/loans"
+      <router-link v-if="['pending', 'return_pending', 'returned'].includes(run.status)" to="/loans"
         >查看我的借阅与最新进度 →</router-link
       >
     </section>
@@ -236,6 +346,13 @@ onMounted(refresh)
   display: flex;
   gap: 12px;
   margin: 24px 0;
+}
+.task-types {
+  margin-top: 18px;
+  max-width: 100%;
+}
+.loan-card .el-button {
+  margin-top: 12px;
 }
 .borrow-controls {
   display: flex;

@@ -26,6 +26,17 @@ async function panel(overrides = {}) {
       status: 'confirm_borrow',
       action: { id: 'action' }
     }),
+    selectReturnLoan: async () => ({
+      status: 'confirm_return',
+      task_type: 'return',
+      action: { id: 'return-action' }
+    }),
+    getLoanPage: async () => ({
+      status: 'select_loan',
+      task_type: 'return',
+      loans: [],
+      loan_page: { page: 2, page_size: 6, total: 7 }
+    }),
     decideBorrow: async () => ({ run_id: 'new-run', status: 'pending', receipt: { loan_id: 1 } }),
     getBorrowRun: async () => ({ run_id: 'new-run', status: 'pending' }),
     retryBorrowRun: async () => ({ run_id: 'new-run', status: 'pending' }),
@@ -54,7 +65,7 @@ async function panel(overrides = {}) {
   const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1]
   const module = new vm.SourceTextModule(
     script +
-      '\nexport { query, run, busy, error, search, select, decide, refresh, restart, openSource, sourceContent, sourceError }',
+      '\nexport { query, run, busy, error, search, select, decide, refresh, restart, openSource, sourceContent, sourceError, taskType, selectLoan, changeLoanPage }',
     { context }
   )
   await module.link(
@@ -96,6 +107,17 @@ test('selecting a book only prepares a confirmation; double confirmation is bloc
 
 test('network failure never fabricates success and refresh can recover receipt', async () => {
   const { state } = await panel({
+    selectReturnLoan: async () => ({
+      status: 'confirm_return',
+      task_type: 'return',
+      action: { id: 'return-action' }
+    }),
+    getLoanPage: async () => ({
+      status: 'select_loan',
+      task_type: 'return',
+      loans: [],
+      loan_page: { page: 2, page_size: 6, total: 7 }
+    }),
     decideBorrow: async () => {
       throw Error('network')
     }
@@ -180,4 +202,80 @@ test('source preview double click is bounded and disabled sources show an error'
   await pending
   assert.equal(state.sourceContent.value, null)
   assert.equal(state.sourceError.value, '来源已停用')
+})
+
+test('personal loan query accepts empty wording and selection only prepares a return', async () => {
+  let submitted
+  let writes = 0
+  const { state } = await panel({
+    startBorrowRun: async (data) => {
+      submitted = data
+      return {
+        status: 'select_loan',
+        task_type: 'my_loans',
+        loans: [
+          { id: 2, status: 'borrowed' },
+          { id: 3, status: 'return_pending' }
+        ]
+      }
+    },
+    decideBorrow: async () => {
+      writes++
+      return { status: 'return_pending' }
+    }
+  })
+  state.taskType.value = 'my_loans'
+  await state.search()
+  assert.equal(submitted.task_type, 'my_loans')
+  assert.ok(submitted.query)
+  await state.selectLoan(3)
+  assert.equal(state.run.value.status, 'select_loan')
+  await state.selectLoan(2)
+  assert.equal(state.run.value.status, 'confirm_return')
+  assert.equal(writes, 0)
+  await state.decide(true)
+  assert.equal(writes, 1)
+  assert.equal(state.run.value.status, 'return_pending')
+})
+
+test('return task refresh restores task type and cancel on restart never confirms', async () => {
+  const decisions = []
+  const { state } = await panel({
+    getBorrowRun: async () => ({
+      status: 'confirm_return',
+      task_type: 'return',
+      action: { id: 'return-action' }
+    }),
+    decideBorrow: async (_, decision) => {
+      decisions.push(decision.confirmed)
+      return { status: 'cancelled' }
+    }
+  })
+  state.query.value = '找书'
+  await state.search()
+  await state.refresh()
+  assert.equal(state.taskType.value, 'return')
+  await state.restart()
+  assert.deepEqual(decisions, [false])
+  assert.equal(state.run.value, null)
+})
+
+test('double return selection and pagination are blocked while a request is pending', async () => {
+  let finish
+  let calls = 0
+  const { state } = await panel({
+    selectReturnLoan: () => {
+      calls++
+      return new Promise((resolve) => {
+        finish = resolve
+      })
+    }
+  })
+  state.run.value = { status: 'select_loan', loans: [{ id: 2, status: 'borrowed' }] }
+  const pending = state.selectLoan(2)
+  await state.selectLoan(2)
+  await state.changeLoanPage(2)
+  assert.equal(calls, 1)
+  finish({ status: 'confirm_return', action: { id: 'return-action' } })
+  await pending
 })

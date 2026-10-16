@@ -17,6 +17,10 @@ export function canRequestLoan(book) {
   return Boolean(book?.is_active && book.available_copies > 0)
 }
 
+export function canRequestReturn(loan) {
+  return loan?.status === 'borrowed'
+}
+
 export function bookAvailability(book) {
   if (!book || !Number.isFinite(book.total_copies)) return '馆藏信息待确认'
   if (book.total_copies === 0) return '本馆尚未登记馆藏'

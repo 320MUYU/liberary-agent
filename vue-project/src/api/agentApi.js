@@ -18,3 +18,13 @@ export const decideBorrow = (id, data) =>
   })
 export const retryBorrowRun = (id) =>
   request({ url: `${base}/${encodeURIComponent(id)}/retry`, method: 'post', timeout: 70000 })
+
+export const selectReturnLoan = (id, loanId) =>
+  request({
+    url: `${base}/${encodeURIComponent(id)}/select-loan`,
+    method: 'post',
+    data: { loan_id: loanId }
+  })
+
+export const getLoanPage = (id, page) =>
+  request({ url: `${base}/${encodeURIComponent(id)}/loans-page`, method: 'post', data: { page } })
