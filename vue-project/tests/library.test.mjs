@@ -158,6 +158,18 @@ test('borrowing requests require an active book and an available copy', () => {
   assert.equal(canRequestLoan(null), false)
 })
 
+test('public catalogue entries distinguish missing holdings from unavailable copies', () => {
+  assert.equal(
+    library.bookAvailability({ total_copies: 0, available_copies: 0 }),
+    '本馆尚未登记馆藏'
+  )
+  assert.equal(library.bookAvailability({ total_copies: 2, available_copies: 0 }), '暂无可借副本')
+  assert.equal(library.bookAvailability({ total_copies: 2, available_copies: 1 }), '可借 1 册')
+  assert.equal(library.bookLanguages({ languages: ['chi', 'eng'] }), '中文 / 英语')
+  assert.equal(library.bookLanguages(null), '未提供')
+  assert.equal(library.bookLanguages({ languages: ['xyz'] }), 'xyz')
+})
+
 test('reader and administrator actions follow the complete borrowing lifecycle', () => {
   assert.deepEqual(loanActions('pending', 'reader'), ['cancel'])
   assert.deepEqual(loanActions('pending', 'admin'), ['confirm-borrow', 'reject'])

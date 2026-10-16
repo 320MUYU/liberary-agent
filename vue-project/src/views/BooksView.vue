@@ -3,7 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBookApi, getBooksApi } from '@/bookApi.js'
 import { createLoanApi } from '@/loanApi.js'
-import { canRequestLoan } from '@/utils/library.js'
+import { bookAvailability, bookLanguages, canRequestLoan } from '@/utils/library.js'
 
 const books = ref([])
 const total = ref(0)
@@ -91,9 +91,9 @@ onMounted(fetchBooks)
   <div class="books-page">
     <section class="library-intro">
       <div>
-        <span>LIBRARY COLLECTION</span>
+        <span>BOOK DISCOVERY</span>
         <h2>让下一本好书，走进你的生活</h2>
-        <p>检索馆藏图书，在线提交借阅申请，管理员确认后领取实体书。</p>
+        <p>发现 AI、儿童与历史好书，查看书目来源和本馆馆藏。有可借副本时，可在线申请借阅。</p>
       </div>
       <router-link to="/loans"><el-button plain>查看我的借阅</el-button></router-link>
     </section>
@@ -114,13 +114,23 @@ onMounted(fetchBooks)
         aria-label="搜索书名、作者或 ISBN"
         @clear="searchBooks"
       />
-      <el-input
+      <el-select
         v-model="filters.category"
         clearable
-        placeholder="分类（精确匹配）"
+        filterable
+        allow-create
+        default-first-option
+        placeholder="全部分类"
         aria-label="图书分类"
-        @clear="searchBooks"
-      />
+        @change="searchBooks"
+      >
+        <el-option
+          v-for="category in ['AI / Agent', '儿童图书', '历史图书']"
+          :key="category"
+          :label="category"
+          :value="category"
+        />
+      </el-select>
       <el-button type="primary" native-type="submit" :loading="loading">搜索</el-button>
       <el-button :disabled="loading" @click="fetchBooks">刷新</el-button>
     </form>
@@ -146,9 +156,10 @@ onMounted(fetchBooks)
               {{ book.description || '暂无图书简介，可点击详情查看馆藏信息。' }}
             </p>
             <div class="stock">
-              <el-tag :type="book.available_copies > 0 ? 'success' : 'info'" size="small"
-                >可借 {{ book.available_copies }} 册</el-tag
-              ><small>馆藏 {{ book.total_copies }} 册</small>
+              <el-tag :type="book.available_copies > 0 ? 'success' : 'info'" size="small">{{
+                bookAvailability(book)
+              }}</el-tag
+              ><small>{{ book.source ? '公开书目' : '本馆书目' }}</small>
             </div>
             <div class="actions">
               <el-button @click="openDetails(book.id)">详情</el-button>
@@ -157,7 +168,7 @@ onMounted(fetchBooks)
                 :disabled="Boolean(busyId) || !canRequestLoan(book)"
                 :loading="busyId === book.id"
                 @click="requestLoan(book)"
-                >{{ book.available_copies > 0 ? '申请借阅' : '暂无可借副本' }}</el-button
+                >{{ canRequestLoan(book) ? '申请借阅' : '暂不可借' }}</el-button
               >
             </div>
           </div>
@@ -197,12 +208,25 @@ onMounted(fetchBooks)
               }}</el-descriptions-item
             >
             <el-descriptions-item label="分类">{{ detail.category }}</el-descriptions-item>
+            <el-descriptions-item v-if="detail.source" label="语言">{{
+              bookLanguages(detail.source)
+            }}</el-descriptions-item>
+            <el-descriptions-item v-if="detail.source" label="书目来源">
+              <a :href="detail.source.url" target="_blank" rel="noopener noreferrer"
+                >{{ detail.source.name }} · 查看此版本</a
+              >
+            </el-descriptions-item>
             <el-descriptions-item label="馆藏"
-              >可借 {{ detail.available_copies }} / 共
-              {{ detail.total_copies }} 册</el-descriptions-item
+              >{{ bookAvailability(detail)
+              }}<span v-if="detail.total_copies > 0">
+                · 共 {{ detail.total_copies }} 册</span
+              ></el-descriptions-item
             >
           </el-descriptions>
           <p class="full-description">{{ detail.description || '暂无简介' }}</p>
+          <p v-if="detail.source" class="full-description">
+            公开书目提供图书资料，实际借阅以本馆登记的实体副本为准。
+          </p>
         </template>
       </div>
       <template #footer
@@ -213,7 +237,7 @@ onMounted(fetchBooks)
           :disabled="Boolean(busyId) || !canRequestLoan(detail)"
           :loading="busyId === detail.id"
           @click="requestLoan(detail)"
-          >{{ canRequestLoan(detail) ? '申请借阅' : '暂无可借副本' }}</el-button
+          >{{ canRequestLoan(detail) ? '申请借阅' : '当前不可申请' }}</el-button
         ></template
       >
     </el-dialog>
@@ -259,7 +283,8 @@ onMounted(fetchBooks)
 .toolbar > .el-input:first-child {
   flex: 1;
 }
-.toolbar > .el-input:nth-child(2) {
+.toolbar > .el-select {
+  width: 190px;
   max-width: 190px;
 }
 .collection {
@@ -389,7 +414,8 @@ onMounted(fetchBooks)
   .toolbar > .el-input:first-child {
     flex-basis: 100%;
   }
-  .toolbar > .el-input:nth-child(2) {
+  .toolbar > .el-select {
+    min-width: 120px;
     max-width: none;
     flex: 1;
   }

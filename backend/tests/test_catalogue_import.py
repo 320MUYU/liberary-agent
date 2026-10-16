@@ -90,3 +90,16 @@ class CatalogueImportTest(unittest.TestCase):
         self.assertFalse(rejected)
         self.assertIsNone(records[0].isbn)
         self.assertIsNone(records[0].publication_year)
+
+    def test_public_detail_exposes_source_and_keeps_inventory_authoritative(self):
+        from app.services import book_service
+        book_id = import_records(self.db, [record()])[0]["book_id"]
+        detail = book_service.get_book_detail(self.db, book_id)
+        self.assertEqual(detail.source.name, "Open Library")
+        self.assertEqual(detail.source.languages, ["eng"])
+        self.assertEqual(detail.source.url, "https://openlibrary.org/books/OL100M")
+        self.assertEqual(detail.total_copies, 0)
+        self.db.add(BookCopy(book_id=book_id, barcode="REAL-COPY", location="A1", status="available"))
+        self.db.commit()
+        self.assertEqual(book_service.get_book_detail(self.db, book_id).available_copies, 1)
+        self.assertEqual(book_service.list_books_page(self.db, 1, 10, category="AI / Agent")[0], 1)

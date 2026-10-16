@@ -17,6 +17,18 @@ export function canRequestLoan(book) {
   return Boolean(book?.is_active && book.available_copies > 0)
 }
 
+export function bookAvailability(book) {
+  if (!book || !Number.isFinite(book.total_copies)) return '馆藏信息待确认'
+  if (book.total_copies === 0) return '本馆尚未登记馆藏'
+  if (book.available_copies > 0) return `可借 ${book.available_copies} 册`
+  return '暂无可借副本'
+}
+
+export function bookLanguages(source) {
+  const names = { chi: '中文', zho: '中文', eng: '英语', fre: '法语', fra: '法语', jpn: '日语' }
+  return source?.languages?.map((code) => names[code] || code).join(' / ') || '未提供'
+}
+
 export function loanActions(status, role) {
   if (role === 'reader') {
     if (status === 'pending') return ['cancel']

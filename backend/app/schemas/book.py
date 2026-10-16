@@ -80,6 +80,12 @@ class BookCopyCreateRequest(BookCopyUpdateRequest):
     book_id: int = Field(ge=1, strict=True, description="所属书目 ID")
 
 
+class BookSourceResponse(BaseModel):
+    name: str = "Open Library"
+    url: str
+    languages: list[str] = Field(default_factory=list)
+
+
 class BookResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -93,6 +99,7 @@ class BookResponse(BaseModel):
     description: str | None = None
     cover: str | None = None
     is_active: bool
+    source: BookSourceResponse | None = None
     # 由后续查询服务聚合副本后填充，ORM 模型不保存库存数量。
     total_copies: int = Field(default=0, ge=0)
     available_copies: int = Field(default=0, ge=0)

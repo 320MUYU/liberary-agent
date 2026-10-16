@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.common.exceptions import BusinessException
 from app.models.book_copies import BookCopy
 from app.models.books import Book
+from app.models.book_sources import BookSource
 from app.models.loans import Loan
 from app.schemas.book import (
     BookCopyCreateRequest,
@@ -15,6 +16,7 @@ from app.schemas.book import (
     BookCreateRequest,
     BookResponse,
     BookUpdateRequest,
+    BookSourceResponse,
 )
 
 
@@ -49,16 +51,20 @@ def _inventory(db: Session, book_ids: list[int]) -> dict[int, tuple[int, int]]:
     return {book_id: (total, available) for book_id, total, available in rows}
 
 
-def _response(book: Book, counts: tuple[int, int]) -> BookResponse:
+def _response(book: Book, counts: tuple[int, int], source: BookSource | None = None) -> BookResponse:
     response = BookResponse.model_validate(book)
     response.total_copies = int(counts[0])
     # MySQL SUM(integer) returns Decimal; assignment does not revalidate Pydantic fields.
     response.available_copies = int(counts[1]) if book.is_active else 0
+    if source:
+        response.source = BookSourceResponse(url=source.source_url,
+            languages=source.metadata_json.get("languages", []))
     return response
 
 
 def book_response(db: Session, book: Book) -> BookResponse:
-    return _response(book, _inventory(db, [book.id]).get(book.id, (0, 0)))
+    source = db.scalar(select(BookSource).where(BookSource.book_id == book.id))
+    return _response(book, _inventory(db, [book.id]).get(book.id, (0, 0)), source)
 
 
 def get_book_detail(
@@ -92,7 +98,9 @@ def list_books_page(
     total = query.count()
     books = query.order_by(Book.id).offset((page - 1) * page_size).limit(page_size).all()
     counts = _inventory(db, [book.id for book in books])
-    return total, [_response(book, counts.get(book.id, (0, 0))) for book in books]
+    sources = {source.book_id: source for source in db.scalars(
+        select(BookSource).where(BookSource.book_id.in_([book.id for book in books])))} if books else {}
+    return total, [_response(book, counts.get(book.id, (0, 0)), sources.get(book.id)) for book in books]
 
 
 def _ensure_isbn_available(
