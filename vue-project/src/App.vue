@@ -233,7 +233,10 @@ onMounted(async () => {
 }
 .sidebar {
   width: 256px;
-  min-height: 100vh;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
   padding: 28px 18px 22px;
   display: flex;
   flex-direction: column;
@@ -244,11 +247,14 @@ onMounted(async () => {
   background: #102b2c;
   box-shadow: 12px 0 38px rgba(15, 42, 43, 0.08);
 }
+.sidebar > * {
+  flex-shrink: 0;
+}
 .brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  width: 100%;
+  width: auto;
   margin: 0 8px 42px;
   padding: 0;
   text-align: left;
