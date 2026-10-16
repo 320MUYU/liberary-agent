@@ -57,6 +57,8 @@ RAG_REQUEST_TIMEOUT_SECONDS=60
 
 本方案使用硅基流动托管的 BGE-M3，无需本地 GPU。程序在 base URL 后添加 `/embeddings`；不要填写 `/chat/completions`。BGE-M3 使用固定 1024 维，配置也兼容单数 `EMBEDDING_DIMENSION`（两者只填一个）。批量 32 可根据服务限额调小。嵌入请求超时受知识问答总时间预算限制，60 秒不是额外叠加的等待时间。DeepSeek 与嵌入服务分别配置密钥。
 
+配置项以 `backend/app/config.py` 的 `Settings` 为准。其他项目中的 `MODEL_API_KEY`、`MODEL_BASE_URL`、`MODEL_NAME` 应分别改为 `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`；模型名须为对应服务实际支持的名称。未知的 `.env` 字段会触发 `extra_forbidden` 并阻止启动。当前代码不读取 `OCR_*`，仅填写 OCR 密钥不会启用扫描件识别。整理旧配置前，可将完整原文件备份至已被 Git 忽略的 `backend/data/local-config-backups/<时间>/.env`，再从运行配置移除未实现的字段；备份同样包含密钥，不应提交或分享。
+
 保留百炼兼容方式：设置 `EMBEDDING_PROVIDER=dashscope`、`EMBEDDING_MODEL=text-embedding-v4`、`DASHSCOPE_API_KEY` 和与密钥地域匹配的 `DASHSCOPE_EMBEDDING_URL` 原生文本向量接口。不同 provider 的密钥不回退混用。
 
 在四个终端分别启动以下进程。前三个终端的工作目录为 `backend`：
@@ -84,6 +86,8 @@ npm run dev
 ```
 
 仅启动 API 不会自动处理索引任务。修改 `.env` 后重启 API 和 worker，让两者使用相同模型、地域、维度和私有目录。示例 Chroma 没有认证，仅监听本机；跨主机部署前需要单独设计网络访问控制和认证，不应把端口直接公开。
+
+首次启动时，先等待 API 输出 `Application startup complete`，再启动 worker。知识库表由 API 启动阶段创建，worker 提前启动可能因 `knowledge_jobs` 表尚不存在而退出；表创建完成后重启 worker 即可。
 
 当前项目启动使用 `Base.metadata.create_all` 创建缺失表，不能迁移已经存在的同名旧表。更新已有部署时，应先备份并为字段变更执行受审查的数据库迁移；不要删除业务数据库来代替迁移。
 
@@ -144,6 +148,19 @@ $env:JWT_ALGORITHM='HS256'
 `tests/fixtures/rag_evaluation.json` 明确标记 `synthetic=true`，包含 30 条命中、无依据、停用、连续追问和不可信文档/引用异常用例。脚本将这些资料放入进程内 SQLite，注入确定性假向量、假检索和假模型；不上传资料，不调用任何云端服务。30/30 仅表示此组流程回归通过，不能换算成真实嵌入检索召回率、DeepSeek 事实准确率或提示注入防护通过率。
 
 正式验收应由馆方依据真实、当前发布文档人工标注问题及对应文档 ID；覆盖中文同义问法、跨章节、追问、无答案、停用换版和恶意文档。建议先不少于 30 题，再根据失败样本迭代。质量阈值由馆方确认，当前 0.6 距离阈值尚需真实语料校准。
+
+### 2026-10-16 本地真实服务联调记录
+
+本次使用本机 MySQL、FastAPI、Vue、Chroma HTTP 和独立 worker，实际调用硅基流动 `BAAI/bge-m3`（1024 维）及本地所配的 DeepSeek `deepseek-v4-pro`。语料为明确标注的合成馆规，不能作为正式馆规验收结果。
+
+- 上传 Markdown 后，worker 完成 6 个切片的真实嵌入与入库；未发布时查询返回 `no_match`。
+- 发布后，开放时间、研讨室人数与时长、借阅数量与借期、取消与迟到、携带食品与饮水这 5 题均返回正确事实及合法数字引用；所有返回来源均通过原文预览接口逐一核对。
+- 结合上一轮借阅回答追问续借次数和天数，正确返回一次、十五天及引用；7 次已发布状态下的问答（含无依据题、追问）耗时约 3.2–8.0 秒。
+- 打印价格在资料中没有依据，返回 `insufficient_evidence`，未编造金额。停用合成文档后，原问题返回 `no_match`；合成文档最终保持停用。
+- 额外探测 9 条有依据问题及 5 条无答案问题：最近切片的余弦距离分别为 0.202–0.446、0.468–0.608。阈值 0.6 会纳入其中 4 条无答案问题的候选，说明向量距离不能单独判断文档是否含有答案。该小样本不用于确定正式阈值，本地仍保留 0.6，后续用真实馆规和人工标注题校准。
+- 后端 145 项测试全部通过（含 2 项实际 Chroma HTTP 测试）；前端 8 项测试与生产构建通过。前端构建仍有较大资源包提示。
+
+本机详细问答、距离记录及服务日志保存在被 Git 忽略的 `backend/data/rag-local-acceptance/`，其中 `report.json` 不含密钥或登录凭证。此次只确认了真实服务链路和合成资料上的行为；正式文档质量、扫描件 OCR 及浏览器交互仍需分别验收。
 
 真实评估集格式示例（文档 ID 必须替换为当前实例的实际 ID）：
 
