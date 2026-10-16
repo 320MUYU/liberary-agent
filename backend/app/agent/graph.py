@@ -28,12 +28,13 @@ class AgentState(TypedDict, total=False):
     status: str
     action: dict
     receipt: dict
+    tool_error: bool
 
 
 def build_graph(checkpointer, model_call, read_tool, prepare=None, execute=None):
     def think(state):
         messages = state.get("messages") or [SystemMessage(content=SYSTEM), HumanMessage(content=state["query"])]
-        if state.get("model_calls", 0) >= 4 or state.get("tool_calls", 0) >= 8:
+        if state.get("tool_error") or state.get("model_calls", 0) >= 4 or state.get("tool_calls", 0) >= 8:
             return {"pending_tools": []}
         response = model_call(messages)
         # Persist tool decisions, never model reasoning, response metadata or credentials.
@@ -46,17 +47,21 @@ def build_graph(checkpointer, model_call, read_tool, prepare=None, execute=None)
         books = {book["id"]: book for book in state.get("books", [])}
         messages = list(state["messages"])
         count = state.get("tool_calls", 0)
+        failed = False
         for call in state["pending_tools"]:
             result = read_tool(call["name"], call["args"])
             count += 1
+            failed = failed or (not result.get("ok") and result.get("error_code") in {"unavailable", "unauthorized", "budget_exceeded"})
             if result.get("ok"):
                 for book in result["data"]["books"]:
                     if len(books) < 24 or book["id"] in books:
                         books[book["id"]] = book
             messages.append(ToolMessage(content=json.dumps(result, ensure_ascii=False), tool_call_id=call["id"]))
-        return {"books": list(books.values()), "messages": messages, "tool_calls": count}
+        return {"books": list(books.values()), "messages": messages, "tool_calls": count, "tool_error": failed}
 
     def selection(state):
+        if state.get("tool_error"):
+            return {"status": "tool_unavailable", "message": "图书查询未能完成，请稍后重新查找。没有提交借阅申请。"}
         if not state.get("books"):
             return {"status": "no_results", "message": "暂未找到可供选择的书目。请补充书名、作者或简短主题后重新查找。"}
         value = interrupt({"kind": "select_book", "books": state["books"], "message": "请选择具体书目；选择后仍需确认才会提交申请。"})

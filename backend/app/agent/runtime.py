@@ -87,10 +87,25 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
     try:
         settings.AGENT_CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
         with SqliteSaver.from_conn_string(str(settings.AGENT_CHECKPOINT_PATH)) as saver:
+            def read(name, args):
+                try:
+                    if settings.AGENT_TOOL_TRANSPORT == "mcp":
+                        from app.agent.mcp_adapter import read_tool
+                        return read_tool(user_id, name, args, budget)
+                    return execute_read_tool(db, user_id, name, args, budget)
+                finally:
+                    db.rollback()
+
+            def execute(action_id, confirmed):
+                if settings.AGENT_TOOL_TRANSPORT == "mcp":
+                    from app.agent.mcp_adapter import submit_decision
+                    return submit_decision(user_id, action_id, confirmed)
+                return decide_borrow(db, user_id, action_id, confirmed)
+
             graph = build_graph(saver, lambda messages: call_model(messages, budget),
-                lambda name, args: execute_read_tool(db, user_id, name, args, budget),
+                read,
                 prepare=lambda book_id: prepare_borrow(db, user_id, run_id, book_id),
-                execute=lambda action_id, confirmed: decide_borrow(db, user_id, action_id, confirmed))
+                execute=execute)
             config = {"configurable": {"thread_id": run_id}, "recursion_limit": 24}
             snapshot = graph.get_state(config)
             view = graph_view(run_id, snapshot)
@@ -98,7 +113,7 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
                 return view
             if operation == "select":
                 if view["status"] != "select_book":
-                    if view.get("action", {}).get("book", {}).get("id") == payload["book_id"]:
+                    if (view.get("action") or {}).get("book", {}).get("id") == payload["book_id"]:
                         return view
                     raise BusinessException("当前任务不允许选择书目，请刷新", 409)
                 if payload["book_id"] not in {b["id"] for b in view["books"]}:

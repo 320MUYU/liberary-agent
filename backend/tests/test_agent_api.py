@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from langchain_core.messages import AIMessage
+from app.agent.actions import decide_borrow
 from tests import test_library_flow as fixtures
 import unittest
 
@@ -58,3 +59,16 @@ class AgentApiTest(unittest.TestCase):
         self.assertEqual(result["status"], "cancelled")
         self.assertEqual(self.request("GET", path, role="reader")["status"], "cancelled")
         self.assertEqual(self.request("GET", "/loans", role="reader")["total"], 0)
+
+    def test_recovery_after_committed_write_does_not_duplicate_application(self):
+        book = self.setup_agent(); run = self.start(); path = "/agent/runs/" + run["run_id"]
+        selected = self.request("POST", path + "/select", role="reader", json={"book_id": book["id"]})
+        def interrupted(*args):
+            decide_borrow(*args)
+            raise RuntimeError("simulated lost response")
+        with patch("app.agent.runtime.decide_borrow", side_effect=interrupted):
+            result = self.client.post("/api" + path + "/decision", headers=self.headers["reader"], json={"action_id": selected["action"]["id"], "confirmed": True})
+        self.assertEqual(result.json()["code"], 503)
+        result = self.request("POST", path + "/retry", role="reader")
+        self.assertEqual(result["status"], "pending")
+        self.assertEqual(self.request("GET", "/loans", role="reader")["total"], 1)

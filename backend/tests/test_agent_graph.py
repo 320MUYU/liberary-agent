@@ -10,6 +10,12 @@ from app.agent.graph import build_graph
 
 
 class AgentGraphTest(unittest.TestCase):
+    def test_unavailable_tools_are_not_reported_as_empty_catalogue(self):
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            graph = build_graph(saver, lambda _: AIMessage(content="", tool_calls=[{"id": "t", "name": "search_books", "args": {"keyword": "Python"}}]), lambda *_: {"ok": False, "error_code": "unavailable"})
+            result = graph.invoke({"query": "找书", "books": [], "messages": []}, {"configurable": {"thread_id": "failed"}})
+            self.assertEqual(result["status"], "tool_unavailable")
+
     def test_write_node_requires_exact_action_confirmation(self):
         calls = []
         with SqliteSaver.from_conn_string(":memory:") as saver:
