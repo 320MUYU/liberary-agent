@@ -1,0 +1,5 @@
+[
+  {"query": "找多智能体相关的书", "category": "AI / Agent", "subjects": ["多智能体"], "title": "协作系统研究"},
+  {"query": "推荐一些历史书", "category": "历史图书", "subjects": ["历史"], "title": "年代纪事"},
+  {"query": "推荐儿童图书", "category": "儿童图书", "subjects": ["儿童文学"], "title": "故事集"}
+]

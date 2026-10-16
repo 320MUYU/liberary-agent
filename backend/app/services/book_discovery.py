@@ -23,7 +23,7 @@ def public_book(book):
 
 
 def topic_query(query):
-    # Remove request wording, not subject words; the original query still goes to vectors.
+    # Remove request wording while preserving the subject words for both recall lanes.
     return re.sub(r"推荐|一些|相关的?|帮我|找|图书|书籍|的书|书$", " ", query).strip() or query
 
 
@@ -37,7 +37,12 @@ def refresh_books(db, books):
             continue
         current = public_book(book_service.book_response(db, book))
         current["channels"] = old.get("channels", [])
-        current["match_reasons"] = old.get("match_reasons", [])
+        source_record = db.scalar(select(BookSource).where(BookSource.book_id == book.id))
+        subjects = source_record.metadata_json.get("subjects", []) if source_record else []
+        valid_reasons = {f"{label}：{getattr(book, field)}" for field, label in
+            [("title", "书名"), ("author", "作者"), ("isbn", "ISBN"), ("category", "分类")]}
+        valid_reasons.add("主题标签：" + "、".join(subjects[:12]))
+        current["match_reasons"] = [reason for reason in old.get("match_reasons", []) if reason in valid_reasons]
         for source in old.get("sources", []):
             valid = db.scalar(select(KnowledgeChunk.id).join(KnowledgeVersion,
                 KnowledgeChunk.version_id == KnowledgeVersion.id).join(KnowledgeDocument,
@@ -48,6 +53,8 @@ def refresh_books(db, books):
                     KnowledgeDocument.active_version_id == KnowledgeVersion.id, KnowledgeVersion.status == "ready"))
             if valid is not None:
                 current["sources"].append(source)
+        if old.get("channels") and not current["sources"] and not current["match_reasons"]:
+            continue
         refreshed.append(current)
     return refreshed
 
