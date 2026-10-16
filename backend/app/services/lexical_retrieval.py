@@ -54,11 +54,12 @@ class LexicalIndex:
         return sorted(rows, key=lambda row: (-row["bm25_score"], row["id"]))[:limit]
 
 
-def published_manifest(db, fingerprint: str):
+def published_manifest(db, fingerprint: str, document_ids=None):
     return tuple(db.execute(select(
         KnowledgeVersion.id, KnowledgeVersion.chunk_count, KnowledgeDocument.title,
     ).join(KnowledgeDocument, KnowledgeVersion.document_id == KnowledgeDocument.id).where(
         KnowledgeDocument.status == "published",
+        *([KnowledgeDocument.id.in_(document_ids)] if document_ids is not None else []),
         KnowledgeDocument.active_version_id == KnowledgeVersion.id,
         KnowledgeVersion.status == "ready",
         KnowledgeVersion.embedding_profile == fingerprint,

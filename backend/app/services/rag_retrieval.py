@@ -21,13 +21,14 @@ def evidence_identity(source):
     return tuple(" ".join(value.split()).casefold() for value in (document.title, chunk.section or "", chunk.text))
 
 
-def source_rows(db, identifiers, fingerprint):
+def source_rows(db, identifiers, fingerprint, document_ids=None):
     if not identifiers:
         return {}
     statement = select(KnowledgeChunk, KnowledgeVersion, KnowledgeDocument).join(
         KnowledgeVersion, KnowledgeChunk.version_id == KnowledgeVersion.id,
     ).join(KnowledgeDocument, KnowledgeVersion.document_id == KnowledgeDocument.id).where(
         KnowledgeChunk.vector_id.in_(identifiers), KnowledgeDocument.status == "published",
+        *([KnowledgeDocument.id.in_(document_ids)] if document_ids is not None else []),
         KnowledgeDocument.active_version_id == KnowledgeVersion.id,
         KnowledgeVersion.status == "ready", KnowledgeVersion.embedding_profile == fingerprint,
     ).execution_options(populate_existing=True)
@@ -76,6 +77,7 @@ class RetrievalResult:
     rows: list[dict] = field(default_factory=list)
     candidates: list[dict] = field(default_factory=list)
     rerank_status: str = "disabled"
+    degraded: list[str] = field(default_factory=list)
     timings_ms: dict = field(default_factory=dict)
 
 
@@ -123,33 +125,39 @@ def base_eligible(row, config):
     )
 
 
-def retrieve(db, queries, profile, *, config, embeddings, store, deadline, reranker=None, strategy=None):
+def retrieve(db, queries, profile, *, config, embeddings, store, deadline, reranker=None, strategy=None,
+             document_ids=None, allow_vector_fallback=False):
     started = time.monotonic()
     mode = strategy or getattr(config, "RAG_RETRIEVAL_MODE", "vector")
     if mode not in {"vector", "hybrid", "hybrid_rerank"}:
         raise BusinessException(code=422, message="不支持的检索方式")
     queries = list(dict.fromkeys(query.strip() for query in queries if query.strip()))[:2]
-    manifest = published_manifest(db, profile["fingerprint"])
+    manifest = published_manifest(db, profile["fingerprint"], document_ids)
     versions = [item[0] for item in manifest]
     result = RetrievalResult()
     if not versions or not queries:
         return result
     lanes = []
-    for query in queries:
-        remaining(deadline)
-        # Each HTTP adapter receives a fresh share of the remaining request budget.
-        if hasattr(embeddings, "timeout"):
-            embeddings.timeout = min(embeddings.timeout, remaining(deadline))
-        vector = embeddings.embed_query(query)
-        remaining(deadline)
-        if hasattr(store, "set_timeout"):
-            store.set_timeout(min(getattr(config, "CHROMA_TIMEOUT_SECONDS", 10), remaining(deadline) / 3))
-        rows = store.query(profile["collection_name"], vector,
-                           limit=getattr(config, "RAG_CANDIDATES", 20), version_ids=versions)
-        rows = [row for row in rows if isinstance(row.get("id"), str)
-                and isinstance(row.get("distance"), Real) and not isinstance(row["distance"], bool)
-                and math.isfinite(row["distance"]) and row["distance"] >= 0]
-        lanes.append(("vector", rows))
+    try:
+        for query in queries:
+            remaining(deadline)
+            # Each HTTP adapter receives a fresh share of the remaining request budget.
+            if hasattr(embeddings, "timeout"):
+                embeddings.timeout = min(embeddings.timeout, remaining(deadline))
+            vector = embeddings.embed_query(query)
+            remaining(deadline)
+            if hasattr(store, "set_timeout"):
+                store.set_timeout(min(getattr(config, "CHROMA_TIMEOUT_SECONDS", 10), remaining(deadline) / 3))
+            rows = store.query(profile["collection_name"], vector,
+                               limit=getattr(config, "RAG_CANDIDATES", 20), version_ids=versions)
+            rows = [row for row in rows if isinstance(row.get("id"), str)
+                    and isinstance(row.get("distance"), Real) and not isinstance(row["distance"], bool)
+                    and math.isfinite(row["distance"]) and row["distance"] >= 0]
+            lanes.append(("vector", rows))
+    except Exception:
+        if not allow_vector_fallback:
+            raise
+        result.degraded.append("vector_unavailable")
     result.timings_ms["vector"] = round((time.monotonic() - started) * 1000, 2)
     lexical_started = time.monotonic()
     if mode != "vector":
@@ -161,12 +169,14 @@ def retrieve(db, queries, profile, *, config, embeddings, store, deadline, reran
     rows = reciprocal_rank_fusion(lanes, getattr(config, "RAG_RRF_K", 60))
     # Refresh publication state before any candidate text is sent to a reranker.
     db.rollback()
-    published = source_rows(db, [row["id"] for row in rows], profile["fingerprint"])
+    published = source_rows(db, [row["id"] for row in rows], profile["fingerprint"], document_ids)
     unique_rows, seen_text = [], set()
     for row in rows:
         if row["id"] not in published:
             continue
         identity = evidence_identity(published[row["id"]])
+        if document_ids is not None:
+            identity = (published[row["id"]][2].id, identity)
         if identity not in seen_text:
             unique_rows.append(row)
             seen_text.add(identity)
