@@ -1,0 +1,177 @@
+"""图书书目和实体副本管理，库存始终从馆藏状态计算。"""
+
+from sqlalchemy import case, func, or_
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.common.exceptions import BusinessException
+from app.models.book_copies import BookCopy
+from app.models.books import Book
+from app.schemas.book import (
+    BookCopyCreateRequest,
+    BookCopyResponse,
+    BookCopyUpdateRequest,
+    BookCreateRequest,
+    BookResponse,
+    BookUpdateRequest,
+)
+
+
+def get_book_or_404(
+    db: Session, book_id: int, active_only: bool = False, for_update: bool = False
+) -> Book:
+    query = db.query(Book).filter(Book.id == book_id)
+    if active_only:
+        query = query.filter(Book.is_active.is_(True))
+    if for_update:
+        query = query.populate_existing().with_for_update()
+    book = query.first()
+    if book is None:
+        raise BusinessException(code=404, message="图书不存在或已下架")
+    return book
+
+
+def _inventory(db: Session, book_ids: list[int]) -> dict[int, tuple[int, int]]:
+    if not book_ids:
+        return {}
+    rows = (
+        db.query(
+            BookCopy.book_id,
+            func.count(BookCopy.id),
+            func.sum(case((BookCopy.status == "available", 1), else_=0)),
+        )
+        .filter(BookCopy.book_id.in_(book_ids), BookCopy.status != "withdrawn")
+        .group_by(BookCopy.book_id)
+        .all()
+    )
+    return {book_id: (total, available) for book_id, total, available in rows}
+
+
+def _response(book: Book, counts: tuple[int, int]) -> BookResponse:
+    response = BookResponse.model_validate(book)
+    response.total_copies = counts[0]
+    response.available_copies = counts[1] if book.is_active else 0
+    return response
+
+
+def book_response(db: Session, book: Book) -> BookResponse:
+    return _response(book, _inventory(db, [book.id]).get(book.id, (0, 0)))
+
+
+def get_book_detail(
+    db: Session, book_id: int, active_only: bool = True
+) -> BookResponse:
+    return book_response(db, get_book_or_404(db, book_id, active_only=active_only))
+
+
+def list_books_page(
+    db: Session,
+    page: int,
+    page_size: int,
+    keyword: str | None = None,
+    category: str | None = None,
+    is_active: bool | None = True,
+) -> tuple[int, list[BookResponse]]:
+    query = db.query(Book)
+    if is_active is not None:
+        query = query.filter(Book.is_active.is_(is_active))
+    if keyword and keyword.strip():
+        value = keyword.strip()
+        query = query.filter(
+            or_(
+                Book.title.contains(value, autoescape=True),
+                Book.author.contains(value, autoescape=True),
+                Book.isbn.contains(value, autoescape=True),
+            )
+        )
+    if category and category.strip():
+        query = query.filter(Book.category == category.strip())
+    total = query.count()
+    books = query.order_by(Book.id).offset((page - 1) * page_size).limit(page_size).all()
+    counts = _inventory(db, [book.id for book in books])
+    return total, [_response(book, counts.get(book.id, (0, 0))) for book in books]
+
+
+def _ensure_isbn_available(
+    db: Session, isbn: str | None, exclude_book_id: int | None = None
+) -> None:
+    if isbn is None:
+        return
+    query = db.query(Book.id).filter(Book.isbn == isbn)
+    if exclude_book_id is not None:
+        query = query.filter(Book.id != exclude_book_id)
+    if query.first():
+        raise BusinessException(code=409, message="ISBN 已被其他书目使用")
+
+
+def _save(db: Session, item: Book | BookCopy, conflict_message: str):
+    try:
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+    except IntegrityError as exc:
+        db.rollback()
+        raise BusinessException(code=409, message=conflict_message) from exc
+    return item
+
+
+def create_book(db: Session, data: BookCreateRequest) -> Book:
+    _ensure_isbn_available(db, data.isbn)
+    return _save(db, Book(**data.model_dump()), "ISBN 已被其他书目使用")
+
+
+def update_book(db: Session, book_id: int, data: BookUpdateRequest) -> Book:
+    book = get_book_or_404(db, book_id, for_update=True)
+    _ensure_isbn_available(db, data.isbn, exclude_book_id=book_id)
+    for field, value in data.model_dump().items():
+        setattr(book, field, value)
+    return _save(db, book, "ISBN 已被其他书目使用")
+
+
+def list_book_copies_page(
+    db: Session, book_id: int, page: int, page_size: int
+) -> tuple[int, list[BookCopyResponse]]:
+    get_book_or_404(db, book_id)
+    query = db.query(BookCopy).filter(BookCopy.book_id == book_id)
+    total = query.count()
+    items = query.order_by(BookCopy.id).offset((page - 1) * page_size).limit(page_size).all()
+    return total, [BookCopyResponse.model_validate(item) for item in items]
+
+
+def _ensure_barcode_available(
+    db: Session, barcode: str, exclude_copy_id: int | None = None
+) -> None:
+    query = db.query(BookCopy.id).filter(BookCopy.barcode == barcode)
+    if exclude_copy_id is not None:
+        query = query.filter(BookCopy.id != exclude_copy_id)
+    if query.first():
+        raise BusinessException(code=409, message="馆藏条码已被其他副本使用")
+
+
+def create_book_copy(db: Session, data: BookCopyCreateRequest) -> BookCopy:
+    get_book_or_404(db, data.book_id, for_update=True)
+    _ensure_barcode_available(db, data.barcode)
+    return _save(db, BookCopy(**data.model_dump()), "馆藏条码已被其他副本使用")
+
+
+def update_book_copy(
+    db: Session, copy_id: int, data: BookCopyUpdateRequest
+) -> BookCopy:
+    book_id = db.query(BookCopy.book_id).filter(BookCopy.id == copy_id).scalar()
+    if book_id is None:
+        raise BusinessException(code=404, message="馆藏副本不存在")
+    # 全部库存变更先锁书目、再锁副本，借阅业务可复用同一锁顺序。
+    get_book_or_404(db, book_id, for_update=True)
+    copy = (
+        db.query(BookCopy)
+        .filter(BookCopy.id == copy_id)
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+    if copy is None:
+        raise BusinessException(code=404, message="馆藏副本不存在")
+    _ensure_barcode_available(db, data.barcode, exclude_copy_id=copy_id)
+    for field, value in data.model_dump().items():
+        setattr(copy, field, value)
+    return _save(db, copy, "馆藏条码已被其他副本使用")
