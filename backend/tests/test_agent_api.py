@@ -14,6 +14,8 @@ class AgentApiTest(unittest.TestCase):
     catalogue = fixtures.LibraryFlowTest.catalogue
 
     def setup_agent(self):
+        transport = patch("app.agent.runtime.settings.AGENT_TOOL_TRANSPORT", "local")
+        transport.start(); self.addCleanup(transport.stop)
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         config = patch("app.agent.runtime.settings.AGENT_CHECKPOINT_PATH", Path(directory.name) / "graph.sqlite")

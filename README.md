@@ -7,6 +7,7 @@
 - 前端：Vue 3、Vite、Vue Router、Element Plus、Axios
 - 后端：FastAPI、SQLAlchemy、MySQL、JWT、bcrypt
 - AI 对话：LangChain、DeepSeek；可选 RAG 使用 `BAAI/bge-m3`、Chroma、中文 BM25L 与 RRF 融合，可开关硅基流动 `BAAI/bge-reranker-v2-m3` 重排
+- 借阅 Agent：LangGraph、SQLite 检查点、可选 MCP Streamable HTTP、确认与幂等回执
 
 项目为了兼容既有数据库，后端内部继续使用 `Lab`、`Equipment`、`lab_id` 与 `/api/lab` 等名称；产品界面统一使用“学习空间”和“设施”。
 
@@ -22,13 +23,16 @@
 - DeepSeek 多轮对话、公开文档知识问答与来源引用
 - 管理员知识文档上传、索引任务、版本发布、停用与失败重试
 - 管理员对比向量、混合及重排检索，查看召回原文与实际 Chroma 入库记录
+- 图书借阅助手：自然语言找书、选择书目、确认申请与刷新恢复
 - 桌面端、平板和移动端响应式界面
 
 ## AI 能力边界
 
 普通聊天默认可用，RAG 默认关闭。启用知识库后，管理员上传并发布的馆规、预约说明等静态文档可用于知识问答；每条回答附本轮来源，资料不足时拒绝编造。知识文档放在私有目录，不通过公开 `/uploads` 提供。
 
-AI 当前不能读取实时图书、库存、借阅、空间、设施和个人预约数据，也不能替用户办理借还或预约。图书借还通过页面与后端接口执行，尚未接入 AI 工具调用、多 Agent、MCP 或 Harness。数字引用有效不等于答案事实正确，上线前仍需用学校正式文档人工验收。仓库中的评估资料明确标为合成测试，不是学校馆规。
+“图书借阅助手”模式可以查询真实书目和库存，用户选择具体书目并确认后提交借阅申请，仍需管理员确认借出；包含 LangGraph、MCP 工具接入与基础 Harness。普通聊天和知识库模式不执行业务操作；Agent 尚未接入归还、空间预约、管理员审批或多 Agent。数字引用有效不等于答案事实正确，上线前仍需用学校正式文档人工验收。仓库中的评估资料明确标为合成测试，不是学校馆规。
+
+新增服务的启动方式、确认流程及恢复说明见 [Agent 使用与验收指南](docs/agent-guide.md)。MCP 模式下，借阅助手需要 Vue、FastAPI、MCP 三个进程；完整 RAG 再加 Chroma 和索引 worker。LangGraph 随 API 运行，Harness 按需测试，无须另起常驻进程。
 
 配置、启动顺序、文档发布和评估见 [RAG 使用与验收指南](docs/rag-guide.md)。
 
