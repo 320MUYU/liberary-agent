@@ -15,6 +15,8 @@ const { token, userInfo, updateUser, logout } = useAuthStore()
 
 const navigation = [
   { label: '概览', path: '/', icon: 'House' },
+  { label: '图书检索', path: '/books', icon: 'Collection' },
+  { label: '我的借阅', path: '/loans', icon: 'Tickets' },
   { label: '学习空间', path: '/spaces', icon: 'Reading' },
   { label: '我的预约', path: '/reservations', icon: 'Calendar' },
   { label: 'AI 空间助手', path: '/assistant', icon: 'ChatDotRound', badge: 'AI' }
@@ -23,6 +25,8 @@ const navigation = [
 // 管理菜单只在管理员登录时出现。这只是"不给普通用户看"，不是权限控制：
 // 真正的拦截在后端接口的 get_current_admin 上。
 const adminNavigation = [
+  { label: '书目与馆藏', path: '/admin/books', icon: 'Collection' },
+  { label: '借还审核', path: '/admin/loans', icon: 'Tickets' },
   { label: '读者管理', path: '/admin/users', icon: 'UserFilled' },
   { label: '空间管理', path: '/admin/labs', icon: 'Reading' },
   { label: '设施管理', path: '/admin/equipments', icon: 'SetUp' },

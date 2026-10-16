@@ -1,0 +1,57 @@
+export const LOAN_STATUSES = {
+  pending: { label: '待确认借出', type: 'warning' },
+  borrowed: { label: '借阅中', type: 'primary' },
+  return_pending: { label: '待确认归还', type: 'warning' },
+  returned: { label: '已归还', type: 'success' },
+  rejected: { label: '已拒绝', type: 'danger' },
+  cancelled: { label: '已取消', type: 'info' }
+}
+
+export const COPY_STATUSES = {
+  available: { label: '正常馆藏', type: 'success' },
+  maintenance: { label: '维护中', type: 'warning' },
+  withdrawn: { label: '已退藏', type: 'info' }
+}
+
+export function canRequestLoan(book) {
+  return Boolean(book?.is_active && book.available_copies > 0)
+}
+
+export function loanActions(status, role) {
+  if (role === 'reader') {
+    if (status === 'pending') return ['cancel']
+    if (status === 'borrowed') return ['request-return']
+  }
+  if (role === 'admin') {
+    if (status === 'pending') return ['confirm-borrow', 'reject']
+    if (status === 'return_pending') return ['confirm-return']
+  }
+  return []
+}
+
+export function copyAvailability(copy) {
+  if (copy.is_on_loan) return { label: '借出中', type: 'primary' }
+  if (copy.status === 'available') return { label: '可借出', type: 'success' }
+  return COPY_STATUSES[copy.status] || { label: '状态未知', type: 'info' }
+}
+
+export function toBookPayload(book) {
+  const optional = (value) => String(value || '').trim() || null
+  return {
+    title: String(book.title || '').trim(),
+    author: String(book.author || '').trim(),
+    isbn: optional(book.isbn),
+    publisher: optional(book.publisher),
+    publication_year: Number.isInteger(book.publication_year) ? book.publication_year : null,
+    category: String(book.category || '').trim(),
+    description: optional(book.description),
+    cover: optional(book.cover),
+    is_active: Boolean(book.is_active)
+  }
+}
+
+export function formatLoanTime(value) {
+  if (!value) return '—'
+  // 服务端使用本地无时区日期，保留原时间，避免浏览器额外偏移时区。
+  return String(value).replace('T', ' ').slice(0, 16)
+}

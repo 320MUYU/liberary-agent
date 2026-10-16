@@ -28,6 +28,16 @@ const router = createRouter({
     },
     { path: '/labs', redirect: '/spaces' },
     {
+      path: '/books',
+      component: () => import('@/views/BooksView.vue'),
+      meta: { title: '图书检索', requiresAuth: true }
+    },
+    {
+      path: '/loans',
+      component: () => import('@/views/LoansView.vue'),
+      meta: { title: '我的借阅', requiresAuth: true }
+    },
+    {
       path: '/reservations',
       component: () => import('@/views/ReservationsView.vue'),
       meta: { title: '我的预约', requiresAuth: true }
@@ -46,6 +56,16 @@ const router = createRouter({
       path: '/admin/users',
       component: () => import('@/views/admin/UserManageView.vue'),
       meta: { title: '读者管理', requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/admin/books',
+      component: () => import('@/views/admin/BookManageView.vue'),
+      meta: { title: '书目与馆藏', requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/admin/loans',
+      component: () => import('@/views/admin/LoanManageView.vue'),
+      meta: { title: '借还审核', requiresAuth: true, requiresAdmin: true }
     },
     {
       path: '/admin/labs',
