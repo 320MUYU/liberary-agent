@@ -12,6 +12,28 @@ const conditions = {
   purpose: '课程讨论',
   note: ''
 }
+test('managed space selection uses the parent and read-only mode cannot select', async () => {
+  const calls = []
+  const managed = {
+    run: {
+      run_id: 'space-child',
+      status: 'select_space',
+      conditions,
+      spaces: [{ id: 1, can_reserve: true }]
+    },
+    operate: async (operation, data) => {
+      calls.push([operation, data.space_id])
+      return { status: 'confirm_reservation', conditions, action: { id: 'a', conditions } }
+    }
+  }
+  const active = await panel({ managed })
+  await active.state.selectSpace(1)
+  assert.deepEqual(calls, [['select_space', 1]])
+  const readOnly = await panel({ managed: { ...managed, readOnly: true } })
+  await readOnly.state.selectSpace(1)
+  assert.equal(calls.length, 1)
+})
+
 async function panel(overrides = {}, stored = '') {
   let unmount
   let mounted

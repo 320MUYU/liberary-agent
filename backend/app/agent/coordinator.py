@@ -26,7 +26,7 @@ def plan_workflow(query, budget):
     definition = {"name": "plan_workflow", "description": "返回受约束的业务任务计划或澄清问题",
         "parameters": WorkflowPlan.model_json_schema()}
     with tracing_context(enabled=False):
-        response = model.bind_tools([definition], tool_choice="plan_workflow").invoke(
+        response = model.bind_tools([definition]).invoke(
             [SystemMessage(content=SYSTEM), HumanMessage(content=query)])
     budget.remaining()
     try:
