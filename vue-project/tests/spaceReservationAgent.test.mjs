@@ -17,6 +17,7 @@ async function panel(overrides = {}, stored = '') {
   let mounted
   const saved = new Map(stored ? [['space-reservation-run-5', stored]] : [])
   const context = vm.createContext({
+    defineProps: () => ({ managed: overrides.managed || null }),
     crypto: { randomUUID: () => 'new-space' },
     sessionStorage: {
       getItem: (key) => saved.get(key),
@@ -26,6 +27,7 @@ async function panel(overrides = {}, stored = '') {
   })
   const dependencies = {
     vue: {
+      watch: () => {},
       ref: (value) => ({ value }),
       onMounted: (fn) => {
         mounted = fn

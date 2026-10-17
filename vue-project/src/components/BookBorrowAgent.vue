@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   startBorrowRun,
   getBorrowRun,
@@ -20,9 +20,10 @@ import {
   formatLoanTime
 } from '@/utils/library'
 
+const props = defineProps({ managed: { type: Object, default: null } })
 const query = ref('')
-const taskType = ref('borrow')
-const run = ref(null)
+const taskType = ref(props.managed?.run?.task_type || 'borrow')
+const run = ref(props.managed?.run || null)
 const busy = ref(false)
 const error = ref('')
 const sourceDialog = ref(false)
@@ -30,18 +31,24 @@ const sourceLoading = ref(false)
 const sourceContent = ref(null)
 const sourceError = ref('')
 const storageKey = `library-borrow-run-${getUserInfo()?.id}`
-const runId = ref(sessionStorage.getItem(storageKey) || '')
+const runId = ref(props.managed ? props.managed.run?.run_id || '' : sessionStorage.getItem(storageKey) || '')
+watch(() => props.managed?.run, (value) => {
+  if (!value) return
+  run.value = value
+  runId.value = value.run_id
+  if (value.task_type) taskType.value = value.task_type
+})
 let active = true
 onUnmounted(() => {
   active = false
 })
 
-async function perform(operation) {
-  if (busy.value) return
+async function perform(operation, kind, payload) {
+  if (busy.value || props.managed?.busy) return
   busy.value = true
   error.value = ''
   try {
-    const result = await operation()
+    const result = await (props.managed && kind ? props.managed.operate(kind, payload) : operation())
     if (active) {
       run.value = result
       if (result.task_type) taskType.value = result.task_type
@@ -54,6 +61,7 @@ async function perform(operation) {
 }
 
 async function search() {
+  if (props.managed) return
   if (busy.value || runId.value || (taskType.value === 'borrow' && !query.value.trim())) return
   if (query.value.trim().length > 1000) {
     error.value = '查找描述不能超过1000字。'
@@ -73,20 +81,22 @@ async function search() {
 }
 
 async function select(bookId) {
+  if (props.managed?.readOnly) return
   if (run.value?.status !== 'select_book') return
   if (!canRequestLoan(run.value.books.find((book) => book.id === bookId))) return
-  await perform(() => selectBorrowBook(runId.value, bookId))
+  await perform(() => selectBorrowBook(runId.value, bookId), 'select', { book_id: bookId })
 }
 
 async function selectLoan(loanId) {
+  if (props.managed?.readOnly) return
   if (run.value?.status !== 'select_loan') return
   if (!canRequestReturn(run.value.loans.find((loan) => loan.id === loanId))) return
-  await perform(() => selectReturnLoan(runId.value, loanId))
+  await perform(() => selectReturnLoan(runId.value, loanId), 'select_loan', { loan_id: loanId })
 }
 
 async function changeLoanPage(page) {
   if (run.value?.status !== 'select_loan') return
-  await perform(() => getLoanPage(runId.value, page))
+  await perform(() => getLoanPage(runId.value, page), 'loans_page', { page })
 }
 
 async function openSource(source) {
@@ -106,20 +116,22 @@ async function openSource(source) {
 }
 
 async function decide(confirmed) {
+  if (props.managed?.readOnly) return
   if (!['confirm_borrow', 'confirm_return'].includes(run.value?.status)) return
   const actionId = run.value.action.id
-  await perform(() => decideBorrow(runId.value, { action_id: actionId, confirmed }))
+  await perform(() => decideBorrow(runId.value, { action_id: actionId, confirmed }), 'decision', { action_id: actionId, confirmed })
 }
 
 async function refresh() {
-  if (runId.value) await perform(() => getBorrowRun(runId.value))
+  if (runId.value && !props.managed) await perform(() => getBorrowRun(runId.value))
 }
 
 async function retry() {
-  if (runId.value) await perform(() => retryBorrowRun(runId.value))
+  if (runId.value) await perform(() => retryBorrowRun(runId.value), 'retry')
 }
 
 async function restart() {
+  if (props.managed) return
   if (busy.value) return
   if (['confirm_borrow', 'confirm_return'].includes(run.value?.status)) {
     await decide(false)
@@ -136,7 +148,7 @@ onMounted(refresh)
 
 <template>
   <div class="borrow-agent">
-    <div class="borrow-intro">
+    <div v-if="!props.managed" class="borrow-intro">
       <span>找书借阅 · 我的借阅 · 申请归还</span>
       <h3>{{ taskType === 'borrow' ? '告诉我，你想找什么书？' : '查看自己的借阅，准备下一步' }}</h3>
       <p>
@@ -148,6 +160,7 @@ onMounted(refresh)
       </p>
     </div>
     <el-radio-group
+      v-if="!props.managed"
       v-model="taskType"
       class="task-types"
       aria-label="借阅助手任务"
@@ -157,7 +170,7 @@ onMounted(refresh)
       <el-radio-button value="my_loans">我的借阅</el-radio-button>
       <el-radio-button value="return">申请归还</el-radio-button>
     </el-radio-group>
-    <form class="borrow-search" @submit.prevent="search">
+    <form v-if="!props.managed" class="borrow-search" @submit.prevent="search">
       <el-input
         v-model="query"
         aria-label="找书需求"
@@ -186,7 +199,7 @@ onMounted(refresh)
       :closable="false"
       show-icon
     />
-    <div v-if="runId" class="borrow-controls">
+    <div v-if="runId && !props.managed" class="borrow-controls">
       <el-button :disabled="busy" @click="refresh">刷新任务状态</el-button>
       <el-button
         v-if="error || run?.status === 'retryable' || run?.status === 'confirmed'"
@@ -197,7 +210,7 @@ onMounted(refresh)
       <el-button :disabled="busy" @click="restart">开始新任务</el-button>
     </div>
     <section v-if="run?.status === 'select_book'" aria-label="可选书目">
-      <p>{{ run.message }}</p>
+      <p>{{ props.managed?.readOnly ? '本步仅查询，未提交任何申请。' : run.message }}</p>
       <div class="borrow-books">
         <article v-for="book in run.books" :key="book.id" class="borrow-book">
           <h4>{{ book.title }}</h4>
@@ -224,7 +237,7 @@ onMounted(refresh)
             rel="noopener noreferrer"
             >查看来源版次</a
           >
-          <el-button :disabled="busy || !canRequestLoan(book)" @click="select(book.id)"
+          <el-button v-if="!props.managed?.readOnly" :disabled="busy || props.managed?.busy || !canRequestLoan(book)" @click="select(book.id)"
             >选择这本书</el-button
           >
         </article>
@@ -247,7 +260,7 @@ onMounted(refresh)
           <p v-if="loan.status === 'return_pending'" class="muted">
             已申请归还，请交还实体图书并等待管理员确认。
           </p>
-          <el-button :disabled="busy || !canRequestReturn(loan)" @click="selectLoan(loan.id)"
+          <el-button v-if="!props.managed?.readOnly" :disabled="busy || props.managed?.busy || !canRequestReturn(loan)" @click="selectLoan(loan.id)"
             >申请归还这本书</el-button
           >
         </article>

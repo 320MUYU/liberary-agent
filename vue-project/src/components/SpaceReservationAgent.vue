@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { getUserInfo } from '@/auth'
 import {
   startBorrowRun,
@@ -16,24 +16,31 @@ import {
   formatSpaceTime
 } from '@/utils/spaceReservation'
 
-const form = ref({ date: '', start: '', end: '', people: 1, purpose: '', note: '' })
+const props = defineProps({ managed: { type: Object, default: null } })
+const form = ref(props.managed?.run?.conditions || { date: '', start: '', end: '', people: 1, purpose: '', note: '' })
 const query = ref('')
-const run = ref(null)
+const run = ref(props.managed?.run || null)
 const busy = ref(false)
 const error = ref('')
 const storageKey = `space-reservation-run-${getUserInfo()?.id}`
-const runId = ref(sessionStorage.getItem(storageKey) || '')
+const runId = ref(props.managed ? props.managed.run?.run_id || '' : sessionStorage.getItem(storageKey) || '')
+watch(() => props.managed?.run, (value) => {
+  if (!value) return
+  run.value = value
+  runId.value = value.run_id
+  if (value.conditions) form.value = { ...value.conditions, note: value.conditions.note || '' }
+})
 let active = true
 onUnmounted(() => {
   active = false
 })
 
-async function perform(operation) {
-  if (busy.value) return
+async function perform(operation, kind, payload) {
+  if (busy.value || props.managed?.busy) return
   busy.value = true
   error.value = ''
   try {
-    const result = await operation()
+    const result = await (props.managed && kind ? props.managed.operate(kind, payload) : operation())
     if (active) {
       run.value = result
       if (result.conditions)
@@ -47,6 +54,7 @@ async function perform(operation) {
 }
 
 async function search() {
+  if (props.managed) return
   if (busy.value || runId.value) return
   error.value = reservationError(form.value)
   if (error.value) return
@@ -71,33 +79,37 @@ async function search() {
 }
 
 async function selectSpace(id) {
+  if (props.managed?.readOnly) return
   if (
     run.value?.status !== 'select_space' ||
     !run.value.spaces.some((space) => space.id === id && space.can_reserve)
   )
     return
-  await perform(() => selectReservationSpace(runId.value, id))
+  await perform(() => selectReservationSpace(runId.value, id), 'select_space', { space_id: id })
 }
 
 async function changePage(page) {
   if (run.value?.status !== 'select_space') return
-  await perform(() => getSpacePage(runId.value, page))
+  await perform(() => getSpacePage(runId.value, page), 'spaces_page', { page })
 }
 
 async function decide(confirmed) {
+  if (props.managed?.readOnly) return
   if (run.value?.status !== 'confirm_reservation') return
-  await perform(() => decideBorrow(runId.value, { action_id: run.value.action.id, confirmed }))
+  const payload = { action_id: run.value.action.id, confirmed }
+  await perform(() => decideBorrow(runId.value, payload), 'decision', payload)
 }
 
 async function refresh() {
-  if (runId.value) await perform(() => getBorrowRun(runId.value))
+  if (runId.value && !props.managed) await perform(() => getBorrowRun(runId.value))
 }
 
 async function retry() {
-  if (runId.value) await perform(() => retryBorrowRun(runId.value))
+  if (runId.value) await perform(() => retryBorrowRun(runId.value), 'retry')
 }
 
 async function restart() {
+  if (props.managed) return
   if (busy.value) return
   if (run.value?.status === 'confirm_reservation') {
     await decide(false)
@@ -114,12 +126,12 @@ onMounted(refresh)
 
 <template>
   <div class="space-agent">
-    <div class="space-intro">
+    <div v-if="!props.managed" class="space-intro">
       <span>学习空间 · 指定时段查询</span>
       <h3>为这次学习，找一个合适的空间</h3>
       <p>填写明确条件，查询实际空间。选择并确认后才提交预约，最终由管理员审核。</p>
     </div>
-    <form class="space-form" @submit.prevent="search">
+    <form v-if="!props.managed" class="space-form" @submit.prevent="search">
       <fieldset :disabled="busy || !!runId">
         <label class="wide"
           >空间需求（可选）<el-input
@@ -165,7 +177,7 @@ onMounted(refresh)
     </form>
     <p v-if="busy" role="status">正在处理，请稍候…</p>
     <el-alert v-if="error" :title="error" type="warning" :closable="false" show-icon />
-    <div v-if="runId" class="space-controls">
+    <div v-if="runId && !props.managed" class="space-controls">
       <el-button :disabled="busy" @click="refresh">刷新任务状态</el-button>
       <el-button
         v-if="error || run?.status === 'retryable' || run?.status === 'confirmed'"
@@ -176,7 +188,7 @@ onMounted(refresh)
       <el-button :disabled="busy" @click="restart">开始新任务</el-button>
     </div>
     <section v-if="run?.status === 'select_space'" aria-label="可选空间">
-      <p>{{ run.message }}</p>
+      <p>{{ props.managed?.readOnly ? '本步仅查询，未提交预约。' : run.message }}</p>
       <p class="muted">
         检查时间：{{ formatSpaceTime(run.checked_at) }}。刷新可重查本页，提交时再次校验。
       </p>
@@ -196,8 +208,9 @@ onMounted(refresh)
           <p v-else class="muted">未登记设施</p>
           <p class="availability">{{ spaceAvailability(space) }}</p>
           <el-button
+            v-if="!props.managed?.readOnly"
             type="primary"
-            :disabled="busy || !space.can_reserve"
+            :disabled="busy || props.managed?.busy || !space.can_reserve"
             @click="selectSpace(space.id)"
             >选择这个空间</el-button
           >

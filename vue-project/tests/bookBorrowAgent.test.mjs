@@ -8,6 +8,7 @@ async function panel(overrides = {}) {
   let unmount
   const saved = new Map()
   const context = vm.createContext({
+    defineProps: () => ({ managed: overrides.managed || null }),
     crypto: { randomUUID: () => 'new-run' },
     sessionStorage: {
       getItem: (k) => saved.get(k),
@@ -44,6 +45,7 @@ async function panel(overrides = {}) {
   }
   const dependencies = {
     vue: {
+      watch: () => {},
       ref: (value) => ({ value }),
       onMounted: () => {},
       onUnmounted: (fn) => {
@@ -81,6 +83,20 @@ async function panel(overrides = {}) {
   await module.evaluate()
   return { state: module.namespace, unmount: () => unmount() }
 }
+
+test('managed book selection delegates through parent and read-only results cannot prepare', async () => {
+  const calls = []
+  const managed = {
+    run: { run_id: 'child', status: 'select_book', books: [{ id: 1, is_active: true, available_copies: 1 }] },
+    operate: async (kind, payload) => { calls.push([kind, payload.book_id]); return { status: 'confirm_borrow', action: { id: 'a' } } }
+  }
+  const { state } = await panel({ managed })
+  await state.select(1)
+  assert.deepEqual(calls, [['select', 1]])
+  const readOnly = await panel({ managed: { ...managed, readOnly: true } })
+  await readOnly.state.select(1)
+  assert.equal(calls.length, 1)
+})
 
 test('selecting a book only prepares a confirmation; double confirmation is blocked', async () => {
   let writes = 0
