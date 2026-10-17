@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import Callable
 import time
 
 
@@ -31,3 +32,13 @@ class RunBudget:
             if self.models >= self.max_models:
                 raise BudgetExceeded()
             self.models += 1
+
+
+@dataclass
+class WorkflowBudget(RunBudget):
+    """Reserve a durable parent allowance before making an external call."""
+    reserve: Callable[[str], None] = field(default=lambda _: None)
+
+    def consume(self, kind):
+        super().consume(kind)
+        self.reserve(kind)

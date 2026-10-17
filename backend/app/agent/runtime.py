@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from app.agent.actions import decide_borrow, prepare_borrow, decide_return, prepare_return
 from app.agent.reservation_actions import draft_action, prepare_reservation, decide_reservation, receipt as reservation_receipt
 from app.agent.graph import build_graph
-from app.agent.policy import RunBudget
+from app.agent.policy import RunBudget, BudgetExceeded
 from app.agent.tools import execute_read_tool, tool_definitions, allowed_tools, public_loan, error
 from app.common.exceptions import BusinessException
 from app.config import settings
@@ -47,7 +47,7 @@ def owned_run(db, user_id, run_id):
     return run
 
 
-def start_run(db, user_id, request_id, query, task_type="borrow", conditions=None):
+def start_run(db, user_id, request_id, query, task_type="borrow", conditions=None, *, budget=None):
     if task_type not in {"borrow", "my_loans", "return", "reservation"}:
         raise BusinessException("不支持的任务类型", 422)
     if task_type == "reservation":
@@ -73,7 +73,7 @@ def start_run(db, user_id, request_id, query, task_type="borrow", conditions=Non
         action = db.query(AgentReservationAction).filter_by(run_id=request_id, user_id=user_id).first()
         if action is None or action.conditions != conditions.model_dump(mode="json"):
             raise BusinessException("任务编号已绑定其他预约条件", 409)
-    return run_graph(db, user_id, request_id, "retry")
+    return run_graph(db, user_id, request_id, "retry", budget=budget)
 
 
 def graph_view(run_id, snapshot, db=None, user_id=None):
@@ -130,7 +130,11 @@ def graph_view(run_id, snapshot, db=None, user_id=None):
             "receipt": state.get("receipt"), "action": state.get("action")}
 
 
-def run_graph(db, user_id, run_id, operation="view", payload=None):
+def run_graph(db, user_id, run_id, operation="view", payload=None, *, budget=None):
+    if budget is None:
+        from app.models.workflow import WorkflowStep
+        if db.query(WorkflowStep.id).filter_by(child_run_id=run_id).first():
+            raise BusinessException("请从组合任务入口操作此子任务", 409)
     run = owned_run(db, user_id, run_id)
     query = run.query
     task_type = run.task_type
@@ -148,7 +152,7 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
     db.commit()
     if not acquired:
         raise BusinessException("任务正在处理中，请稍后刷新", 409)
-    budget = RunBudget()
+    budget = budget if budget is not None else RunBudget()
     try:
         settings.AGENT_CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
         with SqliteSaver.from_conn_string(str(settings.AGENT_CHECKPOINT_PATH)) as saver:
@@ -260,6 +264,8 @@ def run_graph(db, user_id, run_id, operation="view", payload=None):
                     inputs["conditions"] = conditions.model_dump(mode="json")
             graph.invoke(inputs, config)
             return current_view()
+    except BudgetExceeded:
+        raise BusinessException("本次执行已达到预算上限，请查看已有结果", 429) from None
     except BusinessException:
         raise
     except Exception:
