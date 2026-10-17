@@ -12,6 +12,8 @@ from app.agent import workflow
 from app.common.exceptions import BusinessException
 from app.models.agent import AgentRun
 from app.models.loans import Loan
+from app.models.labs import Lab
+from app.models.reservations import Reservation
 from app.models.workflow import WorkflowRun, WorkflowStep
 from app.schemas.workflow import WorkflowPlan
 from tests import test_loan_service as fixtures
@@ -35,7 +37,10 @@ class WorkflowRuntimeTest(unittest.TestCase):
             budget.consume("model")
             if any(getattr(m, "type", "") == "tool" for m in messages):
                 return AIMessage(content="")
-            return AIMessage(content="", tool_calls=[{"id": "find", "name": "search_books", "args": {"keyword": "Python", "mode": "exact"}}])
+            tool, args = ("search_spaces", {}) if task_type == "reservation" else (
+                ("list_my_loans", {}) if task_type in {"return", "my_loans"} else
+                ("search_books", {"keyword": "Python", "mode": "exact"}))
+            return AIMessage(content="", tool_calls=[{"id": "find", "name": tool, "args": args}])
         fake = patch("app.agent.runtime.call_model", side_effect=model)
         fake.start(); self.addCleanup(fake.stop)
         return workflow.create_workflow(self.db, self.reader.id, str(uuid4()), "找 Python 图书", conditions)
@@ -170,3 +175,59 @@ class WorkflowRuntimeTest(unittest.TestCase):
         run = self.operate(run, "clarify", {"text": "查询Python图书"})
         self.assertEqual(run["status"], "planning")
         self.assertEqual(self.operate(run)["status"], "ready")
+
+    def test_fixed_cross_business_cases_use_real_services_and_independent_checkpoints(self):
+        import json
+        cases = json.loads((Path(__file__).parent / "fixtures/workflows.json").read_text(encoding="utf-8"))["cases"]
+        room = Lab(name="工作流合成空间", code="WF-ROOM", building="测试馆", floor="1", capacity=6, category="研讨室")
+        self.db.add(room); self.db.commit()
+        room_id = room.id
+        conditions = {"date": str(date.today() + timedelta(days=3)), "start": "14:00", "end": "16:00", "people": 3, "purpose": "合成测试"}
+        for case in cases:
+            with self.subTest(case=case["name"]):
+                if "return" in case["types"]:
+                    from app.services import loan_service
+                    from app.schemas.loan import BorrowConfirmRequest
+                    pending = self.db.query(Loan).filter_by(reader_id=self.reader.id, status="pending").first()
+                    loan_service.confirm_borrow(self.db, self.admin, pending.id, BorrowConfirmRequest())
+                tasks = [{"task_type": kind, "query": "Python" if kind == "borrow" else "查询", "title": kind,
+                    "read_only": not case["writes"]} for kind in case["types"]]
+                run = self.setup_workflow(tasks, conditions)
+                ids = [step["child_run_id"] for step in run["steps"]]
+                self.assertEqual(len(set(ids)), len(ids))
+                for index, kind in enumerate(case["types"]):
+                    run = self.operate(run)
+                    if not case["writes"]:
+                        continue
+                    result = run["steps"][index]["result"]
+                    step_id = run["steps"][index]["id"]
+                    operation, selection = ("select_space", {"space_id": room_id}) if kind == "reservation" else (
+                        ("select_loan", {"loan_id": next(l["id"] for l in result["loans"] if l["status"] == "borrowed")})
+                        if kind == "return" else ("select", {"book_id": self.book.id}))
+                    run = self.operate(run, operation, {"step_id": step_id, **selection})
+                    action = run["steps"][index]["result"]["action"]
+                    run = self.operate(run, "decision", {"step_id": step_id, "action_id": action["id"], "confirmed": True})
+                self.assertEqual(run["status"], "completed")
+                self.assertEqual(self.operate(run, "view")["status"], "completed")
+        self.assertEqual(self.db.scalar(select(func.count()).select_from(Loan)), 1)
+        self.assertEqual(self.db.scalar(select(func.count()).select_from(Reservation)), 1)
+
+    def test_failed_external_call_is_charged_before_rollback_and_parent_lease_releases(self):
+        run = self.setup_workflow()
+        def failed(db, user_id, step, conditions, budget):
+            budget.consume("model"); budget.consume("tool")
+            raise BusinessException("工具故障", 503)
+        with patch("app.agent.workflow.invoke_specialist", side_effect=failed):
+            failed_run = self.operate(run)
+        self.assertEqual(failed_run["budget"]["model_calls"], run["budget"]["model_calls"] + 1)
+        self.assertEqual(failed_run["budget"]["tool_calls"], 1)
+        self.assertEqual(self.operate(run)["steps"][0]["result"]["status"], "select_book")
+
+    def test_refresh_never_reactivates_a_skipped_selection(self):
+        run = self.operate(self.setup_workflow())
+        step_id = run["steps"][0]["id"]
+        run = self.operate(run, "skip", {"step_id": step_id})
+        self.assertEqual(run["steps"][0]["status"], "skipped")
+        restored = self.operate(run, "view")
+        self.assertEqual(restored["steps"][0]["status"], "skipped")
+        self.assertEqual(restored["status"], "completed")

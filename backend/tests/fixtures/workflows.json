@@ -1,0 +1,9 @@
+{
+  "synthetic": true,
+  "cases": [
+    {"name": "book_then_space", "types": ["borrow", "reservation"], "writes": true},
+    {"name": "discovery_then_spaces", "types": ["borrow", "reservation"], "writes": false},
+    {"name": "my_loans", "types": ["my_loans"], "writes": false},
+    {"name": "return_then_space", "types": ["return", "reservation"], "writes": true}
+  ]
+}

@@ -56,7 +56,10 @@ def create_workflow(db, user_id, request_id, query, conditions=None):
         db.commit()
     except IntegrityError:
         db.rollback()
-        return create_workflow(db, user_id, request_id, query, conditions)
+        run = owned(db, user_id, request_id)
+        if run.request != request:
+            raise BusinessException("任务编号已绑定其他需求", 409)
+        return operate(db, user_id, request_id)
     return operate(db, user_id, request_id, "retry")
 
 
@@ -127,7 +130,11 @@ def operate(db, user_id, workflow_id, operation="view", payload=None):
                     result = invoke_specialist(db, user_id, step,
                         SpaceConditions.model_validate(run.conditions) if run.conditions else None, budget, "view")
                     if result is not None:
-                        record_result(step, result); db.commit()
+                        if step.status in {"skipped", "cancelled"}:
+                            step.result = result
+                        else:
+                            record_result(step, result)
+                        db.commit()
             parent_status(run, steps); db.commit()
         elif operation == "clarify":
             if run.status != "needs_clarification" or steps:
@@ -209,7 +216,10 @@ def operate(db, user_id, workflow_id, operation="view", payload=None):
                     result = invoke_specialist(db, user_id, step, None, budget, "decision",
                         {"action_id": result["action"]["id"], "confirmed": False})
                     record_result(step, result)
-                step.status = "skipped"
+                if result and result["status"] in RECEIPTS:
+                    record_result(step, result)
+                else:
+                    step.status = "skipped"
             else:
                 result = invoke_specialist(db, user_id, step,
                     SpaceConditions.model_validate(run.conditions) if run.conditions else None, budget,
