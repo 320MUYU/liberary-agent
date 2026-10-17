@@ -9,10 +9,20 @@ async function panel(overrides = {}) {
   const saved = new Map()
   const context = vm.createContext({
     crypto: { randomUUID: () => 'workflow-id' },
-    sessionStorage: { getItem: (k) => saved.get(k), setItem: (k, v) => saved.set(k, v), removeItem: (k) => saved.delete(k) }
+    sessionStorage: {
+      getItem: (k) => saved.get(k),
+      setItem: (k, v) => saved.set(k, v),
+      removeItem: (k) => saved.delete(k)
+    }
   })
   const dependencies = {
-    vue: { ref: (value) => ({ value }), onMounted: () => {}, onUnmounted: (fn) => { unmount = fn } },
+    vue: {
+      ref: (value) => ({ value }),
+      onMounted: () => {},
+      onUnmounted: (fn) => {
+        unmount = fn
+      }
+    },
     '@/auth': { getUserInfo: () => ({ id: 5 }) },
     '@/utils/spaceReservation': utilities,
     '@/components/BookBorrowAgent.vue': { default: {} },
@@ -28,12 +38,26 @@ async function panel(overrides = {}) {
       ...overrides
     }
   }
-  const source = await readFile(new URL('../src/components/WorkflowAssistant.vue', import.meta.url), 'utf8')
+  const source = await readFile(
+    new URL('../src/components/WorkflowAssistant.vue', import.meta.url),
+    'utf8'
+  )
   const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1]
-  const module = new vm.SourceTextModule(script + '\nexport { query, run, busy, error, workflowId, form, start, refresh, advance, submitConditions, restart }', { context })
-  await module.link((name) => new vm.SyntheticModule(Object.keys(dependencies[name]), function () {
-    for (const [key, value] of Object.entries(dependencies[name])) this.setExport(key, value)
-  }, { context }))
+  const module = new vm.SourceTextModule(
+    script +
+      '\nexport { query, run, busy, error, workflowId, form, start, refresh, advance, submitConditions, restart }',
+    { context }
+  )
+  await module.link(
+    (name) =>
+      new vm.SyntheticModule(
+        Object.keys(dependencies[name]),
+        function () {
+          for (const [key, value] of Object.entries(dependencies[name])) this.setExport(key, value)
+        },
+        { context }
+      )
+  )
   await module.evaluate()
   return { state: module.namespace, unmount: () => unmount(), saved }
 }
@@ -41,7 +65,14 @@ async function panel(overrides = {}) {
 test('planning is bounded while pending and never implicitly advances or confirms', async () => {
   let calls = 0
   let resolve
-  const { state } = await panel({ startWorkflow: () => { calls++; return new Promise((done) => { resolve = done }) } })
+  const { state } = await panel({
+    startWorkflow: () => {
+      calls++
+      return new Promise((done) => {
+        resolve = done
+      })
+    }
+  })
   state.query.value = '找书并预约空间'
   const first = state.start()
   await state.start()
@@ -52,7 +83,11 @@ test('planning is bounded while pending and never implicitly advances or confirm
 })
 
 test('lost response retains identity and refresh restores server result', async () => {
-  const { state, saved } = await panel({ startWorkflow: async () => { throw new Error('响应丢失') } })
+  const { state, saved } = await panel({
+    startWorkflow: async () => {
+      throw new Error('响应丢失')
+    }
+  })
   state.query.value = '找书'
   await state.start()
   assert.equal(state.run.value, null)
@@ -63,25 +98,46 @@ test('lost response retains identity and refresh restores server result', async 
 
 test('conditions must be complete before calling the server', async () => {
   let calls = 0
-  const { state } = await panel({ setWorkflowConditions: async () => { calls++; return { status: 'ready', steps: [] } } })
+  const { state } = await panel({
+    setWorkflowConditions: async () => {
+      calls++
+      return { status: 'ready', steps: [] }
+    }
+  })
   state.workflowId.value = 'workflow-id'
   await state.submitConditions()
   assert.equal(calls, 0)
-  state.form.value = { date: '2090-10-20', start: '14:00', end: '16:00', people: 3, purpose: '讨论', note: '' }
+  state.form.value = {
+    date: '2090-10-20',
+    start: '14:00',
+    end: '16:00',
+    people: 3,
+    purpose: '讨论',
+    note: ''
+  }
   await state.submitConditions()
   assert.equal(calls, 1)
 })
 
 test('unmount ignores late results and restart stops unfinished work first', async () => {
   let resolve
-  const { state, unmount } = await panel({ startWorkflow: () => new Promise((done) => { resolve = done }) })
+  const { state, unmount } = await panel({
+    startWorkflow: () =>
+      new Promise((done) => {
+        resolve = done
+      })
+  })
   state.query.value = '找书'
   const pending = state.start()
   unmount()
   resolve({ status: 'ready', steps: [] })
   await pending
   assert.equal(state.run.value, null)
-  const active = await panel({ cancelWorkflow: async () => { throw new Error('停止失败') } })
+  const active = await panel({
+    cancelWorkflow: async () => {
+      throw new Error('停止失败')
+    }
+  })
   active.state.workflowId.value = 'active'
   active.state.run.value = { status: 'waiting' }
   await active.state.restart()

@@ -31,13 +31,18 @@ const sourceLoading = ref(false)
 const sourceContent = ref(null)
 const sourceError = ref('')
 const storageKey = `library-borrow-run-${getUserInfo()?.id}`
-const runId = ref(props.managed ? props.managed.run?.run_id || '' : sessionStorage.getItem(storageKey) || '')
-watch(() => props.managed?.run, (value) => {
-  if (!value) return
-  run.value = value
-  runId.value = value.run_id
-  if (value.task_type) taskType.value = value.task_type
-})
+const runId = ref(
+  props.managed ? props.managed.run?.run_id || '' : sessionStorage.getItem(storageKey) || ''
+)
+watch(
+  () => props.managed?.run,
+  (value) => {
+    if (!value) return
+    run.value = value
+    runId.value = value.run_id
+    if (value.task_type) taskType.value = value.task_type
+  }
+)
 let active = true
 onUnmounted(() => {
   active = false
@@ -48,7 +53,9 @@ async function perform(operation, kind, payload) {
   busy.value = true
   error.value = ''
   try {
-    const result = await (props.managed && kind ? props.managed.operate(kind, payload) : operation())
+    const result = await (props.managed && kind
+      ? props.managed.operate(kind, payload)
+      : operation())
     if (active) {
       run.value = result
       if (result.task_type) taskType.value = result.task_type
@@ -119,7 +126,10 @@ async function decide(confirmed) {
   if (props.managed?.readOnly) return
   if (!['confirm_borrow', 'confirm_return'].includes(run.value?.status)) return
   const actionId = run.value.action.id
-  await perform(() => decideBorrow(runId.value, { action_id: actionId, confirmed }), 'decision', { action_id: actionId, confirmed })
+  await perform(() => decideBorrow(runId.value, { action_id: actionId, confirmed }), 'decision', {
+    action_id: actionId,
+    confirmed
+  })
 }
 
 async function refresh() {
@@ -237,7 +247,10 @@ onMounted(refresh)
             rel="noopener noreferrer"
             >查看来源版次</a
           >
-          <el-button v-if="!props.managed?.readOnly" :disabled="busy || props.managed?.busy || !canRequestLoan(book)" @click="select(book.id)"
+          <el-button
+            v-if="!props.managed?.readOnly"
+            :disabled="busy || props.managed?.busy || !canRequestLoan(book)"
+            @click="select(book.id)"
             >选择这本书</el-button
           >
         </article>
@@ -260,7 +273,10 @@ onMounted(refresh)
           <p v-if="loan.status === 'return_pending'" class="muted">
             已申请归还，请交还实体图书并等待管理员确认。
           </p>
-          <el-button v-if="!props.managed?.readOnly" :disabled="busy || props.managed?.busy || !canRequestReturn(loan)" @click="selectLoan(loan.id)"
+          <el-button
+            v-if="!props.managed?.readOnly"
+            :disabled="busy || props.managed?.busy || !canRequestReturn(loan)"
+            @click="selectLoan(loan.id)"
             >申请归还这本书</el-button
           >
         </article>

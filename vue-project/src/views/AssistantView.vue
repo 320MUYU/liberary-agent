@@ -130,7 +130,10 @@ async function openSource(source) {
 </script>
 
 <template>
-  <div class="assistant-page" :class="{ 'borrow-mode': ['borrow', 'reservation', 'workflow'].includes(mode) }">
+  <div
+    class="assistant-page"
+    :class="{ 'borrow-mode': ['borrow', 'reservation', 'workflow'].includes(mode) }"
+  >
     <section class="chat-panel surface">
       <header class="chat-header">
         <div class="ai-avatar">

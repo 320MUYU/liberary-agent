@@ -87,8 +87,15 @@ async function panel(overrides = {}) {
 test('managed book selection delegates through parent and read-only results cannot prepare', async () => {
   const calls = []
   const managed = {
-    run: { run_id: 'child', status: 'select_book', books: [{ id: 1, is_active: true, available_copies: 1 }] },
-    operate: async (kind, payload) => { calls.push([kind, payload.book_id]); return { status: 'confirm_borrow', action: { id: 'a' } } }
+    run: {
+      run_id: 'child',
+      status: 'select_book',
+      books: [{ id: 1, is_active: true, available_copies: 1 }]
+    },
+    operate: async (kind, payload) => {
+      calls.push([kind, payload.book_id])
+      return { status: 'confirm_borrow', action: { id: 'a' } }
+    }
   }
   const { state } = await panel({ managed })
   await state.select(1)

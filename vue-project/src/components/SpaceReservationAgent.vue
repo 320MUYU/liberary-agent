@@ -17,19 +17,33 @@ import {
 } from '@/utils/spaceReservation'
 
 const props = defineProps({ managed: { type: Object, default: null } })
-const form = ref(props.managed?.run?.conditions || { date: '', start: '', end: '', people: 1, purpose: '', note: '' })
+const form = ref(
+  props.managed?.run?.conditions || {
+    date: '',
+    start: '',
+    end: '',
+    people: 1,
+    purpose: '',
+    note: ''
+  }
+)
 const query = ref('')
 const run = ref(props.managed?.run || null)
 const busy = ref(false)
 const error = ref('')
 const storageKey = `space-reservation-run-${getUserInfo()?.id}`
-const runId = ref(props.managed ? props.managed.run?.run_id || '' : sessionStorage.getItem(storageKey) || '')
-watch(() => props.managed?.run, (value) => {
-  if (!value) return
-  run.value = value
-  runId.value = value.run_id
-  if (value.conditions) form.value = { ...value.conditions, note: value.conditions.note || '' }
-})
+const runId = ref(
+  props.managed ? props.managed.run?.run_id || '' : sessionStorage.getItem(storageKey) || ''
+)
+watch(
+  () => props.managed?.run,
+  (value) => {
+    if (!value) return
+    run.value = value
+    runId.value = value.run_id
+    if (value.conditions) form.value = { ...value.conditions, note: value.conditions.note || '' }
+  }
+)
 let active = true
 onUnmounted(() => {
   active = false
@@ -40,7 +54,9 @@ async function perform(operation, kind, payload) {
   busy.value = true
   error.value = ''
   try {
-    const result = await (props.managed && kind ? props.managed.operate(kind, payload) : operation())
+    const result = await (props.managed && kind
+      ? props.managed.operate(kind, payload)
+      : operation())
     if (active) {
       run.value = result
       if (result.conditions)
