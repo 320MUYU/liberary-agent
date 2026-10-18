@@ -15,8 +15,9 @@ from app.mcp.library import create_server
 
 class DockerMcpTest(unittest.TestCase):
     def test_loopback_defaults_and_explicit_container_allowlist(self):
-        config = Settings(_env_file=None, DATABASE_URL="sqlite://", JWT_SECRET_KEY="test",
-            JWT_EXPIRE_HOURS=24, JWT_ALGORITHM="HS256")
+        with patch.dict("os.environ", {}, clear=True):
+            config = Settings(_env_file=None, DATABASE_URL="sqlite://", JWT_SECRET_KEY="test",
+                JWT_EXPIRE_HOURS=24, JWT_ALGORITHM="HS256")
         self.assertIn("127.0.0.1", config.AGENT_MCP_ALLOWED_HOSTS)
         self.assertNotIn("mcp", config.AGENT_MCP_ALLOWED_HOSTS)
         with patch.object(settings, "AGENT_MCP_ALLOWED_HOSTS", ["mcp"]):
