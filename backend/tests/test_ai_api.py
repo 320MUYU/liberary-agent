@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 
-from app.api.ai import router
+from app.api.ai import get_chat_db, router
 from app.common.exceptions import http_exception_handler, validation_exception_handler
 from app.dependencies.auth import get_current_user
 from app.schemas.ai import ChatResponse
@@ -19,6 +19,7 @@ def create_test_app(authenticated: bool) -> FastAPI:
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     if authenticated:
         app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=1)
+    app.dependency_overrides[get_chat_db] = lambda: None
     return app
 
 
@@ -56,6 +57,13 @@ class AIApiTest(unittest.TestCase):
             },
         )
         mock_chat.assert_called_once()
+        self.assertEqual(mock_chat.call_args.kwargs["user_id"], 1)
+
+    def test_ordinary_chat_can_receive_a_database_session_for_live_reads(self):
+        from app.schemas.ai import ChatMessage, ChatRequest
+        sentinel = object()
+        with patch("app.api.ai.get_db", return_value=iter([sentinel])):
+            self.assertEqual(list(get_chat_db(ChatRequest(messages=[ChatMessage(role="user", content="自习室")]))), [sentinel])
 
     def test_main_api_registers_chat_route(self):
         from app.main import app

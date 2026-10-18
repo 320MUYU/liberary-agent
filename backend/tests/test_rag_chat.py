@@ -47,6 +47,12 @@ class FakeModel:
             raise answer
         return AIMessage(content=answer)
 
+    def model_copy(self, update):
+        return self
+
+    def bind_tools(self, definitions):
+        return self
+
 
 class FakeEmbeddings:
     def __init__(self, error=None):

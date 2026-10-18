@@ -1,4 +1,7 @@
+import json
+from datetime import datetime
 import unittest
+from unittest.mock import patch
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import ValidationError
@@ -6,6 +9,7 @@ from pydantic import ValidationError
 from app.common.exceptions import BusinessException
 from app.schemas.ai import ChatMessage, ChatRequest
 from app.services import ai_services
+from app.services.time_context import BEIJING
 
 
 class FakeChatModel:
@@ -19,6 +23,13 @@ class FakeChatModel:
         if self.error:
             raise self.error
         return self.response
+
+    def bind_tools(self, definitions):
+        self.definitions = definitions
+        return self
+
+    def model_copy(self, update):
+        return self
 
 
 class AIServiceTest(unittest.TestCase):
@@ -80,6 +91,67 @@ class AIServiceTest(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, 503)
         self.assertEqual(raised.exception.message, "AI 服务尚未配置，请联系管理员")
+
+    def test_every_chat_injects_trusted_current_beijing_time(self):
+        model = FakeChatModel()
+        with patch("app.services.ai_services.now_beijing", return_value=datetime(2026, 10, 18, 0, 30, tzinfo=BEIJING)):
+            ai_services.chat(self.request(), model=model)
+        system = model.received_messages[0].content
+        self.assertIn("2026-10-18", system)
+        self.assertIn("周日", system)
+        self.assertIn("Asia/Shanghai", system)
+
+    def test_multi_turn_slot_query_passes_only_server_identity_and_live_tool_evidence(self):
+        class SequenceModel(FakeChatModel):
+            def invoke(self, messages):
+                self.received_messages = list(messages)
+                if any(message.type == "tool" for message in messages):
+                    evidence = json.loads(messages[-1].content)
+                    return AIMessage(content="10月24日14:00—16:00，" + evidence["data"]["spaces"][0]["name"])
+                return AIMessage(content="", tool_calls=[{"id": "slot", "name": "check_space_availability",
+                    "args": {"date_expression": "2026-10-24", "start": "14:00", "end": "16:00"}}])
+        model = SequenceModel()
+        request = ChatRequest(messages=[
+            ChatMessage(role="user", content="周六有自习室吗"),
+            ChatMessage(role="assistant", content="指2026年10月24日吗？需要哪个时段？"),
+            ChatMessage(role="user", content="对，14点到16点"),
+        ])
+        db = object()
+        with patch("app.services.ai_services.execute_chat_tool", return_value={"ok": True,
+                "data": {"spaces": [{"name": "数据库中的自习室"}]}}) as read:
+            result = ai_services.chat(request, model=model, db=db, user_id=7)
+        self.assertIn("数据库中的自习室", result.content)
+        self.assertEqual(read.call_args.args[:2], (db, 7))
+        self.assertEqual(model.received_messages[-1].tool_call_id, "slot")
+
+    def test_tool_failures_stop_generation_and_never_return_model_claimed_success(self):
+        model = FakeChatModel(AIMessage(content="已经预约成功", tool_calls=[{
+            "id": "x", "name": "search_space_catalogue", "args": {}}]))
+        with patch("app.services.ai_services.execute_chat_tool", return_value={
+                "ok": False, "error_code": "unavailable", "message": "空间查询暂时不可用"}):
+            result = ai_services.chat(self.request(), model=model, user_id=1)
+        self.assertIn("暂时不可用", result.content)
+        self.assertNotIn("成功", result.content)
+
+    def test_repeated_tool_calls_hit_a_finite_budget(self):
+        model = FakeChatModel(AIMessage(content="", tool_calls=[{
+            "id": "clock", "name": "resolve_date_expression", "args": {"expression": "明天"}}]))
+        with patch("app.services.ai_services.execute_chat_tool", return_value={
+                "ok": True, "data": {"date": "2026-10-19"}}) as read:
+            result = ai_services.chat(self.request(), model=model, user_id=1)
+        self.assertLessEqual(read.call_count, 8)
+        self.assertIn("上限", result.content)
+
+    def test_date_clarification_keeps_already_supplied_time(self):
+        model = FakeChatModel(AIMessage(content="", tool_calls=[{
+            "id": "date", "name": "check_space_availability",
+            "args": {"date_expression": "周六", "start": "14:00", "end": "16:00"}}]))
+        with patch("app.services.ai_services.execute_chat_tool", return_value={"ok": True, "data": {
+                "status": "needs_clarification", "message": "请确认日期。",
+                "candidates": [{"date": "2026-10-24", "weekday": "周六"}]}}):
+            result = ai_services.chat(self.request(), model=model)
+        self.assertIn("已收到14:00—16:00", result.content)
+        self.assertNotIn("需明确起止时间", result.content)
 
 
 if __name__ == "__main__":

@@ -12,19 +12,16 @@ router = APIRouter(prefix="/ai", tags=["AI 对话接口"])
 
 
 def get_chat_db(data: ChatRequest):
-    if data.mode == "knowledge":
-        yield from get_db()
-    else:
-        yield None
+    yield from get_db()
 
 
 @router.post("/chat")
 def chat(
     data: ChatRequest,
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db=Depends(get_chat_db),
 ):
-    message = ai_services.chat(data, db=db)
+    message = ai_services.chat(data, db=db, user_id=user.id)
     # Legacy clients receive the original shape; explicit knowledge mode adds evidence.
     exclude = {"sources", "retrieval_status"} if data.mode == "chat" else set()
     return Response.success(data=message.model_dump(exclude=exclude))
