@@ -19,23 +19,40 @@ const report = {
   cases: [answer(), { ...answer(), id: 'q2' }]
 }
 
-async function page(overrides = {}) {
+async function page(overrides = {}, options = {}) {
   let mounted
   let unmounted
   let leave
-  const storage = new Map()
+  let update
+  let routeWatcher
+  let refreshes = 0
+  const route = { query: { status: options.status } }
+  const storage = new Map(
+    options.position ? [['evaluation-review-position-7', JSON.stringify(options.position)]] : []
+  )
   const context = vm.createContext({
     localStorage: {
       getItem: (key) => storage.get(key),
       setItem: (key, value) => storage.set(key, value)
     },
-    window: { addEventListener() {}, removeEventListener() {}, confirm: () => true },
+    window: {
+      addEventListener() {},
+      removeEventListener() {},
+      confirm: () => options.confirm !== false
+    },
     document: {},
     Blob,
     URL
   })
   const dependencies = {
     '@/components/AiAnswerContent.vue': { default: {} },
+    '@/store/adminTaskStore': {
+      useAdminTasks: () => ({
+        refresh: async () => {
+          refreshes++
+        }
+      })
+    },
     vue: {
       ref: (value) => ({ value }),
       computed: (fn) => ({
@@ -48,9 +65,16 @@ async function page(overrides = {}) {
       },
       onUnmounted: (fn) => {
         unmounted = fn
+      },
+      watch: (_source, fn) => {
+        routeWatcher = fn
       }
     },
     'vue-router': {
+      useRoute: () => route,
+      onBeforeRouteUpdate: (fn) => {
+        update = fn
+      },
       onBeforeRouteLeave: (fn) => {
         leave = fn
       }
@@ -92,7 +116,20 @@ async function page(overrides = {}) {
   )
   await module.evaluate()
   await mounted()
-  return { state: module.namespace, storage, unmount: () => unmounted(), leave: () => leave() }
+  return {
+    state: module.namespace,
+    storage,
+    unmount: () => unmounted(),
+    leave: () => leave(),
+    refreshes: () => refreshes,
+    changeStatus: async (status) => {
+      const to = { query: { status } }
+      if (update && !update(to, route)) return false
+      route.query.status = status
+      await routeWatcher?.(status)
+      return true
+    }
+  }
 }
 
 test('restore persisted decisions on refresh and keep partial draft out of reviewed filter', async () => {
@@ -243,4 +280,52 @@ test('reimport reloads server progress and clears the input for repeated selecti
   assert.equal(target.value, '')
   assert.equal(state.currentCase.value.id, 'q1')
   assert.equal(state.form.value.answer_correct, null)
+})
+
+test('only successful saves and imports refresh the shared pending count', async () => {
+  const view = await page()
+  await view.state.save('draft')
+  assert.equal(view.refreshes(), 1)
+  await view.state.importFile({
+    target: { files: [{ name: 'test.json', size: 2, text: async () => '{}' }], value: 'selected' }
+  })
+  assert.equal(view.refreshes(), 2)
+  const failed = await page({
+    saveEvaluationReview: async () => {
+      throw Error('保存失败')
+    }
+  })
+  await failed.state.save('draft')
+  assert.equal(failed.refreshes(), 0)
+})
+
+test('notification entry skips a remembered completed report and opens a pending answer', async () => {
+  const completed = { ...report, metrics: { total: 2, human_reviewed: 2 } }
+  const pending = {
+    ...report,
+    id: 2,
+    metrics: { total: 2, human_reviewed: 1 },
+    cases: [answer({ ...initialReview, status: 'reviewed' }), { ...answer(), id: 'q2' }]
+  }
+  const view = await page(
+    {
+      listEvaluationRuns: async () => [completed, pending],
+      getEvaluationRun: async (id) => (id === 1 ? completed : pending)
+    },
+    { status: 'pending', position: { runId: 1, caseId: 'q1' } }
+  )
+  assert.equal(view.state.run.value.id, 2)
+  assert.equal(view.state.currentCase.value.id, 'q2')
+  assert.equal(view.state.filter.value, 'pending')
+})
+
+test('same-page pending notification respects unsaved input before changing selection', async () => {
+  const view = await page({}, { confirm: false })
+  view.state.form.value.notes = '保留未保存的判断'
+  assert.equal(await view.changeStatus('pending'), false)
+  assert.equal(view.state.form.value.notes, '保留未保存的判断')
+  assert.equal(view.state.filter.value, 'all')
+  const clean = await page()
+  await clean.changeStatus('pending')
+  assert.equal(clean.state.filter.value, 'pending')
 })

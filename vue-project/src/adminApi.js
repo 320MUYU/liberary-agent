@@ -1,5 +1,9 @@
 import request from './request.js'
 
+export function getAdminTaskSummaryApi() {
+  return request({ url: '/api/admin/tasks/summary', method: 'get' })
+}
+
 // 管理端接口：后端每个接口都挂了 get_current_admin，非管理员调用会被 403 挡回来。
 // 前端隐藏菜单只是体验优化，不能当成权限控制。
 
@@ -8,7 +12,7 @@ export function getUserListApi(params) {
   return request({
     url: '/api/admin/user/list',
     method: 'get',
-    params,
+    params
   })
 }
 
@@ -16,7 +20,7 @@ export function updateUserRoleApi(userId, role) {
   return request({
     url: `/api/admin/user/${userId}/role`,
     method: 'put',
-    data: { role },
+    data: { role }
   })
 }
 
@@ -24,7 +28,7 @@ export function updateUserStatusApi(userId, status) {
   return request({
     url: `/api/admin/user/${userId}/status`,
     method: 'put',
-    data: { status },
+    data: { status }
   })
 }
 
@@ -33,7 +37,7 @@ export function resetUserPasswordApi(userId, newPassword) {
   return request({
     url: `/api/admin/user/${userId}/password`,
     method: 'put',
-    data: { new_password: newPassword },
+    data: { new_password: newPassword }
   })
 }
 
@@ -42,7 +46,7 @@ export function getAdminLabListApi(params) {
   return request({
     url: '/api/admin/lab/list',
     method: 'get',
-    params,
+    params
   })
 }
 
@@ -50,7 +54,7 @@ export function createLabApi(data) {
   return request({
     url: '/api/admin/lab',
     method: 'post',
-    data,
+    data
   })
 }
 
@@ -59,7 +63,7 @@ export function updateLabApi(labId, data) {
   return request({
     url: `/api/admin/lab/${labId}`,
     method: 'put',
-    data,
+    data
   })
 }
 
@@ -67,7 +71,7 @@ export function updateLabApi(labId, data) {
 export function deleteLabApi(labId) {
   return request({
     url: `/api/admin/lab/${labId}`,
-    method: 'delete',
+    method: 'delete'
   })
 }
 
@@ -76,7 +80,7 @@ export function getAdminEquipmentListApi(params) {
   return request({
     url: '/api/admin/equipment/list',
     method: 'get',
-    params,
+    params
   })
 }
 
@@ -84,7 +88,7 @@ export function createEquipmentApi(data) {
   return request({
     url: '/api/admin/equipment',
     method: 'post',
-    data,
+    data
   })
 }
 
@@ -92,14 +96,14 @@ export function updateEquipmentApi(equipmentId, data) {
   return request({
     url: `/api/admin/equipment/${equipmentId}`,
     method: 'put',
-    data,
+    data
   })
 }
 
 export function deleteEquipmentApi(equipmentId) {
   return request({
     url: `/api/admin/equipment/${equipmentId}`,
-    method: 'delete',
+    method: 'delete'
   })
 }
 
@@ -108,7 +112,7 @@ export function getAdminReservationListApi(params) {
   return request({
     url: '/api/admin/reservation/list',
     method: 'get',
-    params,
+    params
   })
 }
 
@@ -116,6 +120,6 @@ export function reviewReservationApi(reservationId, data) {
   return request({
     url: `/api/admin/reservation/${reservationId}/review`,
     method: 'put',
-    data,
+    data
   })
 }

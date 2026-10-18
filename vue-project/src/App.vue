@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getUserInfoApi } from '@/authApi'
 import { BRAND } from '@/config/brand'
 import { loadLabs, notifications } from '@/store/labStore'
 import { useAuthStore } from '@/store/authStore'
+import { useAdminTasks } from '@/store/adminTaskStore'
 import { resolveAssetUrl } from '@/utils/url.js'
 
 const route = useRoute()
@@ -35,6 +36,31 @@ const adminNavigation = [
   { label: 'AI 效果审核', path: '/admin/evaluation-reviews', icon: 'Checked' }
 ]
 const isAdmin = computed(() => userInfo.value?.role === 'admin')
+const {
+  summary: taskSummary,
+  loading: tasksLoading,
+  stale: tasksStale,
+  items: taskItems,
+  countFor: taskCount,
+  refresh: refreshTasks,
+  start: startTasks,
+  stop: stopTasks
+} = useAdminTasks()
+const notificationTotal = computed(() =>
+  isAdmin.value ? taskSummary.value?.total : notifications.length
+)
+function badgeText(value) {
+  return value > 99 ? '99+' : String(value)
+}
+watch(
+  () => [token.value, userInfo.value?.id, userInfo.value?.role],
+  () => {
+    if (token.value && isAdmin.value) startTasks(userInfo.value.id)
+    else stopTasks()
+  },
+  { immediate: true }
+)
+onUnmounted(stopTasks)
 
 const currentTitle = computed(() => route.meta.title || '工作台')
 const userName = computed(() => userInfo.value?.name || userInfo.value?.username || '用户')
@@ -121,6 +147,13 @@ onMounted(async () => {
           >
             <el-icon><component :is="item.icon" /></el-icon>
             <span>{{ item.label }}</span>
+            <span
+              v-if="taskCount(item.path) > 0"
+              class="nav-count"
+              :title="`${taskCount(item.path)} 项待处理${tasksStale ? '，数量待更新' : ''}`"
+              :aria-label="`${taskCount(item.path)} 项待处理`"
+              >{{ badgeText(taskCount(item.path)) }}</span
+            >
           </button>
         </nav>
       </template>
@@ -169,16 +202,55 @@ onMounted(async () => {
             <template #reference
               ><button
                 class="icon-button"
-                :class="{ 'has-dot': notifications.length > 0 }"
-                aria-label="通知"
+                :class="{ 'has-dot': !isAdmin && notifications.length > 0 }"
+                :aria-label="isAdmin ? `待办提醒，共 ${notificationTotal ?? '未知'} 项` : '通知'"
               >
-                <el-icon><Bell /></el-icon></button
-            ></template>
+                <el-icon><Bell /></el-icon
+                ><span v-if="isAdmin && notificationTotal > 0" class="bell-count">{{
+                  badgeText(notificationTotal)
+                }}</span>
+              </button></template
+            >
             <div class="notification-panel">
               <div class="notification-head">
-                <strong>消息通知</strong><span>{{ notifications.length }} 条</span>
+                <strong>{{ isAdmin ? '管理员待办' : '消息通知' }}</strong
+                ><span>{{ notificationTotal ?? '—' }} 项</span>
               </div>
-              <div v-for="item in notifications" :key="item.id" class="notification-item">
+              <template v-if="isAdmin">
+                <p v-if="tasksStale" class="tasks-stale" role="status">
+                  待办数量未更新，请刷新后确认。
+                </p>
+                <button
+                  v-for="item in taskItems"
+                  :key="item.key"
+                  class="notification-item notification-task"
+                  @click="router.push(item.to)"
+                >
+                  <span class="notice-dot warning"></span>
+                  <div>
+                    <strong>{{ item.title }}</strong>
+                    <p>{{ item.count }} {{ item.unit }}需要处理</p>
+                  </div>
+                  <b>{{ badgeText(item.count) }}</b>
+                </button>
+                <div v-if="!taskItems.length" class="notification-empty">
+                  {{
+                    tasksLoading
+                      ? '正在读取待办…'
+                      : taskSummary
+                        ? '当前没有待处理事项'
+                        : '待办暂不可用'
+                  }}
+                </div>
+                <button class="tasks-refresh" :disabled="tasksLoading" @click="refreshTasks">
+                  {{ tasksLoading ? '正在更新…' : '刷新待办' }}
+                </button>
+              </template>
+              <div
+                v-for="item in isAdmin ? [] : notifications"
+                :key="item.id"
+                class="notification-item"
+              >
                 <span :class="`notice-dot ${item.type}`"></span>
                 <div>
                   <strong>{{ item.title }}</strong>
@@ -186,7 +258,9 @@ onMounted(async () => {
                   <small>{{ item.time }}</small>
                 </div>
               </div>
-              <div v-if="!notifications.length" class="notification-empty">暂无通知</div>
+              <div v-if="!isAdmin && !notifications.length" class="notification-empty">
+                暂无通知
+              </div>
             </div>
           </el-popover>
           <span class="top-divider"></span>
@@ -348,6 +422,31 @@ onMounted(async () => {
   font-weight: 800;
   background: var(--mint);
   border-radius: 10px;
+}
+.nav-item .nav-count {
+  min-width: 23px;
+  margin-left: auto;
+  padding: 2px 6px;
+  flex-shrink: 0;
+  color: #9a391d;
+  background: #fce4d7;
+  border-radius: 12px;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+.bell-count {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  min-width: 21px;
+  padding: 1px 5px;
+  color: #fff;
+  background: #b34327;
+  border: 2px solid #fffefa;
+  border-radius: 12px;
+  font-size: 10px;
+  line-height: 16px;
 }
 .nav-item:hover {
   color: white;
@@ -580,6 +679,44 @@ onMounted(async () => {
 }
 .notification-item:last-child {
   border: 0;
+}
+.notification-task {
+  width: 100%;
+  align-items: flex-start;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #edf0eb;
+}
+.notification-task:hover,
+.notification-task:focus-visible {
+  background: #f8f4eb;
+}
+.notification-task b {
+  margin-left: auto;
+  padding: 2px 7px;
+  color: #9a391d;
+  background: #fce4d7;
+  border-radius: 12px;
+  font-size: 11px;
+}
+.tasks-stale {
+  padding-top: 10px;
+  color: #9a391d;
+  font-size: 12px;
+}
+.tasks-refresh {
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px;
+  color: var(--navy-800);
+  background: #f8f4eb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.tasks-refresh:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 .notice-dot {
   width: 8px;

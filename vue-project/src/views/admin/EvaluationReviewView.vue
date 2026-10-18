@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import AiAnswerContent from '@/components/AiAnswerContent.vue'
 import { getUserInfo } from '@/auth'
+import { useAdminTasks } from '@/store/adminTaskStore'
 import {
   listEvaluationRuns,
   getEvaluationRun,
@@ -19,11 +20,13 @@ import {
   reviewLabel
 } from '@/utils/evaluationReview'
 
+const route = useRoute()
+const { refresh: refreshTasks } = useAdminTasks()
 const runs = ref([])
 const run = ref(null)
 const currentCase = ref(null)
 const form = ref(reviewForm({}))
-const filter = ref('all')
+const filter = ref(route.query.status === 'pending' ? 'pending' : 'all')
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -75,10 +78,12 @@ function applyCase(row) {
 
 async function fetchRun(id, caseId) {
   const detail = await getEvaluationRun(id)
+  const candidates =
+    filter.value === 'pending' ? filterCases(detail.cases, 'pending') : detail.cases
   const nextId =
-    detail.cases.find((row) => row.id === caseId)?.id ||
-    detail.cases.find((row) => row.review.status !== 'reviewed')?.id ||
-    detail.cases[0]?.id
+    candidates.find((row) => row.id === caseId)?.id ||
+    candidates.find((row) => row.review.status !== 'reviewed')?.id ||
+    candidates[0]?.id
   const row = nextId ? await getEvaluationCase(id, nextId) : null
   if (!active) return
   run.value = detail
@@ -95,9 +100,14 @@ async function initialize() {
     if (!active) return
     runs.value = available
     const position = restorePosition()
+    const candidates =
+      filter.value === 'pending'
+        ? available.filter((row) => row.metrics.human_reviewed < row.metrics.total)
+        : available
     const chosen =
-      available.find((row) => row.id === position.runId) ||
-      available.find((row) => row.metrics.total === 16) ||
+      candidates.find((row) => row.id === position.runId) ||
+      candidates.find((row) => row.metrics.total === 16) ||
+      candidates[0] ||
       available[0]
     if (chosen) await fetchRun(chosen.id, position.runId === chosen.id ? position.caseId : null)
   } catch (e) {
@@ -155,6 +165,7 @@ async function save(status) {
       status,
       revision: currentCase.value.review.revision
     })
+    await refreshTasks({ afterWrite: true })
     if (!active) return
     applyCase(row)
     notice.value = status === 'reviewed' ? '审核已提交' : '草稿已保存，尚未计入人工指标'
@@ -188,6 +199,7 @@ async function importFile(event) {
       name: file.name.replace(/\.json$/i, '').slice(0, 150) || '评测报告',
       report
     })
+    await refreshTasks({ afterWrite: true })
     const available = await listEvaluationRuns()
     if (!active) return
     runs.value = available
@@ -227,6 +239,16 @@ async function download(kind) {
 }
 
 onBeforeRouteLeave(() => !busy.value && discardChanges())
+onBeforeRouteUpdate(
+  (to, from) => to.query.status === from.query.status || (!busy.value && discardChanges())
+)
+watch(
+  () => route.query.status,
+  async (status) => {
+    filter.value = status === 'pending' ? 'pending' : 'all'
+    await initialize()
+  }
+)
 onMounted(() => {
   window.addEventListener('beforeunload', beforeUnload)
   return initialize()

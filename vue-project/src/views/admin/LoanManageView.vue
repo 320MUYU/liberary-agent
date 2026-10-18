@@ -1,9 +1,14 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBookCopiesApi } from '@/bookApi.js'
 import { confirmBorrowApi, confirmReturnApi, getAdminLoansApi, rejectLoanApi } from '@/loanApi.js'
 import { formatLoanTime, loanActions, LOAN_STATUSES } from '@/utils/library.js'
+import { useAdminTasks } from '@/store/adminTaskStore'
+
+const route = useRoute()
+const { refresh: refreshTasks } = useAdminTasks()
 
 const items = ref([])
 const total = ref(0)
@@ -107,7 +112,7 @@ async function confirmBorrow() {
     )
     borrowVisible.value = false
     ElMessage.success('已确认借出，借期为 30 天')
-    await fetchLoans()
+    await Promise.all([fetchLoans(), refreshTasks({ afterWrite: true })])
   } catch {
     /* 请求层提示副本已占用或读者超额等原因，可重新选择。 */
   } finally {
@@ -136,7 +141,7 @@ async function rejectLoan() {
     await rejectLoanApi(rejectTarget.value.id, reason)
     rejectVisible.value = false
     ElMessage.success('借阅申请已拒绝，读者可查看原因')
-    await fetchLoans()
+    await Promise.all([fetchLoans(), refreshTasks({ afterWrite: true })])
   } catch {
     /* 请求层提示错误，保留拒绝原因供重试。 */
   } finally {
@@ -159,7 +164,7 @@ async function confirmReturn(item) {
     }
     await confirmReturnApi(item.id)
     ElMessage.success('已确认归还，副本已恢复可借')
-    await fetchLoans()
+    await Promise.all([fetchLoans(), refreshTasks({ afterWrite: true })])
   } catch {
     /* 请求层已提示错误。 */
   } finally {
@@ -167,7 +172,15 @@ async function confirmReturn(item) {
   }
 }
 
-onMounted(fetchLoans)
+function applyRouteStatus(status) {
+  filters.status = Object.hasOwn(LOAN_STATUSES, status) ? status : ''
+  filters.keyword = ''
+  Object.assign(query, { keyword: '', status: filters.status || undefined })
+  page.value = 1
+  return fetchLoans()
+}
+watch(() => route.query.status, applyRouteStatus)
+onMounted(() => applyRouteStatus(route.query.status))
 </script>
 
 <template>
