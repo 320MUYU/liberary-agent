@@ -50,7 +50,7 @@
 
 ## 本地运行
 
-2026-10-18 新增 [AI 效果审核管理页面](docs/evaluation-review-guide.md)：支持校验并导入报告、草稿与提交、并发冲突检测、人工统计和 CLI 兼容导出。后端468项（含独立 MySQL、Chroma，无跳过）、前端60项、离线 Harness 112项、Prettier与生产构建通过。本地116条真实回答已导入，仍全部待人工审核；开发验收使用独立合成报告。旧库可执行 `backend/scripts/upgrade_evaluation_reviews.py --apply` 增量建表，更新后重启后端。
+2026-10-18 新增 [AI 效果审核管理页面](docs/evaluation-review-guide.md)：支持导入报告、草稿与提交、并发冲突检测、人工统计和 CLI 兼容导出。聊天与审核页统一支持 Markdown 排版，审核可切换原始文本；管理员菜单显示预约、借还和 AI 审核待办数量，铃铛提供分类入口，处理成功后刷新数量。后端471项（含独立 MySQL、Chroma，无跳过）、前端78项、离线 Harness 112项、Prettier与生产构建通过。桌面和手机浏览器14项检查通过。本地116条真实回答已导入，本轮验收时2条已人工提交、114条待审核；测试只修改独立临时库中的合成记录。旧库可执行 `backend/scripts/upgrade_evaluation_reviews.py --apply` 增量建表，更新前端依赖后重启后端。
 
 2026-10-18 官方资料阶段：后端 446 项（含独立 MySQL、Chroma，无跳过）、离线 Agent Harness 112 项、前端 51 项及生产构建通过。真实模型验证的自动契约检查为知识入口 30/30、统一聊天入口 29/30，语义正确性待人工审核；未通过项和复现方法见 [验收记录](docs/library-acceptance.md#本次执行记录)。
 
