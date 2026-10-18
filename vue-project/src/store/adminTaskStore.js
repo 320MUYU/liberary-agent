@@ -58,6 +58,7 @@ function refresh({ afterWrite = false } = {}) {
   loading.value = true
   const request = Promise.resolve().then(async () => {
     try {
+      if (current !== generation || !authorized()) return
       const data = await getAdminTaskSummaryApi()
       if (current === generation && authorized()) {
         summary.value = data

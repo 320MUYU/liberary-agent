@@ -183,3 +183,17 @@ test('reader sessions never fetch administrator counts and zero counts clear bad
   assert.equal(state.items.value.length, 0)
   assert.equal(state.countFor('/admin/loans'), 0)
 })
+
+test('logout cancels a queued fetch before it can use another session token', async () => {
+  let calls = 0
+  const { state, setIdentity } = await store(async () => {
+    calls++
+    return counts
+  })
+  const queued = state.start(7)
+  setIdentity({ id: 8, role: 'student' })
+  state.stop()
+  await queued
+  assert.equal(calls, 0)
+  assert.equal(state.summary.value, null)
+})
