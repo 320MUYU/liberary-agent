@@ -67,4 +67,32 @@ class LibraryScopeTest(unittest.TestCase):
         response = self.ask(fixtures.FakeStore([{"id": chunk.vector_id, "distance": 0.1}]))
         self.assertEqual(response.retrieval_status, "matched")
 
+    def test_planner_cannot_add_local_scope_or_replace_a_negative_user_condition(self):
+        doc, _, chunk = self.reference()
+        chunk.text = "已被另一读者预约的图书不能续借。"
+        self.db.commit()
+        original = "华科图书还没过期，但被另一位读者预约了，我还能续借吗？只问规定。"
+        request = ChatRequest(mode="knowledge", messages=[{"role": "user",
+            "content": "本系统未过期图书是否可以续借？"}])
+        model = fixtures.FakeModel("华科已被另一读者预约的图书不能续借。[1]")
+        response = rag_service.knowledge_chat(request, self.db, model=model,
+            embeddings=fixtures.FakeEmbeddings(),
+            vector_store=fixtures.FakeStore([{"id": chunk.vector_id, "distance": 0.1}]),
+            original_question=original)
+        self.assertEqual(response.retrieval_status, "matched")
+        self.assertEqual(response.sources[0].document_id, doc.id)
+        self.assertEqual(model.calls[-1][-1].content, original)
+
+    def test_original_local_scope_still_filters_external_sources_when_planner_omits_it(self):
+        self.reference()
+        model, embeddings = fixtures.FakeModel(), fixtures.FakeEmbeddings()
+        request = ChatRequest(mode="knowledge", messages=[{"role": "user", "content": "华科本科生能借20册吗？"}])
+        response = rag_service.knowledge_chat(request, self.db, model=model,
+            embeddings=embeddings, vector_store=fixtures.FakeStore(),
+            original_question="那么阅见本系统也能借20册吗？")
+        self.assertEqual(response.retrieval_status, "no_match")
+        self.assertEqual(response.sources, [])
+        self.assertEqual(embeddings.queries, [])
+        self.assertEqual(model.calls, [])
+
 

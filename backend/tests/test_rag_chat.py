@@ -312,6 +312,54 @@ class RagChatTest(unittest.TestCase):
         context_message = model.calls[-1][1].content
         self.assertLessEqual(len(context_message), 1000)
 
+    def test_delegated_question_keeps_clean_retrieval_and_generation_input(self):
+        question = "华科图书预约支持预约哪些状态或馆区的书？"
+        _, _, chunk = self.add_source("预约范围：已借出图书、其他馆区在架可外借图书。")
+        embeddings = FakeEmbeddings()
+        model = FakeModel("已借出及其他馆区在架可外借图书。[1]")
+        request = self.request([ChatMessage(role="user", content=question)])
+        response = rag_service.knowledge_chat(request, self.db, model=model,
+            embeddings=embeddings, vector_store=FakeStore([{"id": chunk.vector_id, "distance": 0.1}]),
+            original_question=question)
+        self.assertEqual(response.retrieval_status, "matched")
+        self.assertEqual(embeddings.queries, [question])
+        self.assertEqual(model.calls[-1][-1].content, question)
+
+    def test_delegated_follow_up_rewrites_user_question_and_keeps_original_lane(self):
+        import json
+        question, rewritten = "那还没过期但被别人预约的呢？", "华科图书未过期但被他人预约能续借吗？"
+        _, _, chunk = self.add_source("已被另一读者预约的图书不能续借。")
+        model = FakeModel(rewritten, "被他人预约的图书不能续借。[1]")
+        embeddings = FakeEmbeddings()
+        request = self.request([
+            ChatMessage(role="user", content="华科图书续借有哪些限制？"),
+            ChatMessage(role="assistant", content="需要根据续借规定核对。"),
+            ChatMessage(role="user", content="本系统未过期图书能否续借"),
+        ])
+        with patch.object(CONFIG, "RAG_RETRIEVAL_MODE", "hybrid", create=True):
+            response = rag_service.knowledge_chat(request, self.db, model=model,
+                embeddings=embeddings, vector_store=FakeStore([{"id": chunk.vector_id, "distance": 0.1}]),
+                original_question=question)
+        self.assertEqual(response.retrieval_status, "matched")
+        self.assertEqual(json.loads(model.calls[0][-1].content)["question"], question)
+        self.assertEqual(embeddings.queries, [question, rewritten])
+        self.assertEqual(model.calls[-1][-1].content, question)
+        self.assertNotIn("本系统未过期", str(model.calls[-1]))
+
+    def test_combined_request_uses_task_hint_only_for_retrieval(self):
+        original, hint = "先解释华科图书续借限制，再帮我找一本历史书。", "华科图书续借限制"
+        _, _, chunk = self.add_source("已被另一读者预约的图书不能续借。")
+        request = self.request([ChatMessage(role="user", content=hint)])
+        embeddings, model = FakeEmbeddings(), FakeModel("被他人预约的图书不能续借。[1]")
+        with patch.object(CONFIG, "RAG_RETRIEVAL_MODE", "hybrid", create=True):
+            response = rag_service.knowledge_chat(request, self.db, model=model,
+                embeddings=embeddings, vector_store=FakeStore([{"id": chunk.vector_id, "distance": 0.1}]),
+                original_question=original)
+        self.assertEqual(response.retrieval_status, "matched")
+        self.assertEqual(embeddings.queries, [hint, original])
+        self.assertEqual(model.calls[-1][-1].content, original)
+        self.assertEqual(request.messages[-1].content, hint)
+
     def test_document_disabled_during_generation_is_not_returned(self):
         document, _, chunk = self.add_source()
 
