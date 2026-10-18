@@ -19,7 +19,7 @@ const navigation = [
   { label: '我的借阅', path: '/loans', icon: 'Tickets' },
   { label: '学习空间', path: '/spaces', icon: 'Reading' },
   { label: '我的预约', path: '/reservations', icon: 'Calendar' },
-  { label: 'AI 空间助手', path: '/assistant', icon: 'ChatDotRound', badge: 'AI' }
+  { label: '阅见 AI', path: '/assistant', icon: 'ChatDotRound', badge: 'AI' }
 ]
 
 // 管理菜单只在管理员登录时出现。这只是"不给普通用户看"，不是权限控制：

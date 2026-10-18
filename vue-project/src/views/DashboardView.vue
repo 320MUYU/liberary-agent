@@ -71,7 +71,7 @@ function displayDate(date) { const [, month, day] = date.split('-'); return `${N
         <p>{{ welcomeMessage }}</p>
         <div class="welcome-actions">
           <el-button type="primary" size="large" @click="openBooking()"><el-icon><Plus /></el-icon>预约学习空间</el-button>
-          <button @click="router.push('/assistant')"><el-icon><MagicStick /></el-icon>咨询 AI 空间助手</button>
+          <button @click="router.push('/assistant')"><el-icon><MagicStick /></el-icon>咨询 阅见 AI</button>
         </div>
       </div>
       <div class="hero-visual" aria-hidden="true"><span class="hero-window"></span><span class="hero-lamp"></span><span class="hero-books"><i></i><i></i><i></i><i></i></span><span class="hero-desk"></span></div>

@@ -45,7 +45,7 @@ const router = createRouter({
     {
       path: '/assistant',
       component: () => import('@/views/AssistantView.vue'),
-      meta: { title: 'AI 空间助手', requiresAuth: true }
+      meta: { title: '阅见 AI', requiresAuth: true }
     },
     {
       path: '/profile',
