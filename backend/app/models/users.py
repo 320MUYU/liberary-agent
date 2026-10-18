@@ -1,6 +1,6 @@
 from app.database import Base
 from sqlalchemy.orm import Mapped,mapped_column
-from sqlalchemy import String
+from sqlalchemy import String, text
 
 
 class User(Base):
@@ -13,6 +13,9 @@ class User(Base):
         String(50), unique=True, index=True, comment="账号", nullable=False
     )
     password: Mapped[str] = mapped_column(String(255), comment="密码", nullable=False)
+    token_version: Mapped[int] = mapped_column(
+        default=0, server_default=text("0"), nullable=False, comment="密码更新时递增，使旧登录凭证失效"
+    )
     name: Mapped[str] = mapped_column(String(50), comment="名称", nullable=False)
     role: Mapped[str] = mapped_column(
         String(50), comment="角色: student-学生, admin-管理员", nullable=False
