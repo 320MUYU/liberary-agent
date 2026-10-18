@@ -3,6 +3,17 @@
 import copy
 import unittest
 
+from types import SimpleNamespace
+from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy.orm import Session
+
+from app.common.exceptions import BusinessException
+from app.models.users import User
+from app.models.evaluation_review import EvaluationRun, EvaluationCaseReview
+from app.schemas.evaluation_review import ReviewDecision
+from app.services import evaluation_review_service as service
+from scripts.upgrade_evaluation_reviews import upgrade
+
 from app.services.evaluation_reports import (
     apply_reviews, report_identity, summarize, validate_report,
 )
@@ -92,3 +103,84 @@ class ReportValidationTest(unittest.TestCase):
         report["report_id"] = report_identity(report)
         with self.assertRaises(ValueError):
             apply_reviews(report, {"report_id": report["report_id"], "cases": [item]})
+
+
+class ReviewStorageTest(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine("sqlite://")
+        self.addCleanup(self.engine.dispose)
+        User.__table__.create(self.engine)
+        upgrade(self.engine, apply=True)
+        self.db = Session(self.engine)
+        self.addCleanup(self.db.close)
+        self.db.add(User(id=7, username="review-admin", password="hash", name="审核员", role="admin"))
+        self.db.commit()
+        self.admin = SimpleNamespace(id=7, username="review-admin", name="审核员")
+        self.run = service.import_report(self.db, sample_report(), "测试报告", self.admin)
+
+    def decision(self, **kwargs):
+        return ReviewDecision.model_validate({"revision": 0, "status": "draft", **kwargs})
+
+    def test_migration_preview_repeatability_and_old_data(self):
+        self.assertEqual(upgrade(self.engine, apply=True), [])
+        self.assertEqual(self.db.scalar(text("SELECT username FROM users")), "review-admin")
+        engine = create_engine("sqlite://")
+        self.addCleanup(engine.dispose)
+        self.assertEqual(len(upgrade(engine)), 2)
+        self.assertFalse(inspect(engine).has_table(EvaluationRun.__tablename__))
+
+    def test_reimport_preserves_draft_and_imported_reviews_are_untrusted(self):
+        saved = service.save_review(self.db, self.run["id"], "c0:knowledge", self.decision(
+            answer_correct=False, notes="待核对"), self.admin)
+        report = sample_report()
+        report["results"][0]["review"] = {"status": "reviewed", "answer_correct": True}
+        again = service.import_report(self.db, report, "另一个名字", self.admin)
+        self.assertEqual(again["id"], self.run["id"])
+        self.assertEqual(service.get_case(self.db, self.run["id"], "c0:knowledge")["review"], saved["review"])
+        self.assertEqual(len(self.db.scalars(select(EvaluationCaseReview)).all()), 2)
+        self.assertEqual(again["metrics"]["human_reviewed"], 0)
+
+    def test_submit_identity_timestamp_filter_metrics_and_cli_export(self):
+        saved = service.save_review(self.db, self.run["id"], "c0:knowledge", self.decision(
+            status="reviewed", answer_correct=False, citations_support=True, notes="遗漏"), self.admin)
+        review = saved["review"]
+        self.assertEqual(review["reviewer_id"], 7)
+        self.assertIn("review-admin", review["reviewer"])
+        self.assertIsNotNone(review["reviewed_at"])
+        self.assertEqual(review["revision"], 1)
+        detail = service.get_run(self.db, self.run["id"], "human_negative")
+        self.assertEqual(len(detail["cases"]), 1)
+        self.assertEqual(detail["metrics"]["human_review_coverage"], .5)
+        self.assertEqual(detail["metrics"]["answer_accuracy"], 0)
+        self.assertEqual(len(service.get_run(self.db, self.run["id"], "pending")["cases"]), 1)
+        self.assertEqual(len(service.get_run(self.db, self.run["id"], "automatic_failure")["cases"]), 0)
+        exported = service.export_reviews(self.db, self.run["id"])
+        merged = apply_reviews(sample_report(), exported)
+        self.assertEqual(merged["metrics"], service.export_report(self.db, self.run["id"])["metrics"])
+        self.assertEqual(len(exported["cases"]), 1)
+        self.assertEqual(service.list_runs(self.db)[0]["metrics"]["human_reviewed"], 1)
+
+    def test_stale_revision_cannot_overwrite_and_error_case_cannot_pass(self):
+        run_id = self.run["id"]
+        service.save_review(self.db, run_id, "c0:knowledge", self.decision(notes="first"), self.admin)
+        with self.assertRaises(BusinessException) as error:
+            service.save_review(self.db, run_id, "c0:knowledge", self.decision(notes="stale"), self.admin)
+        self.assertEqual(error.exception.code, 409)
+        self.assertEqual(service.get_case(self.db, run_id, "c0:knowledge")["review"]["notes"], "first")
+        report = sample_report()
+        report["results"][0]["error"] = "failed"
+        report["report_id"] = report_identity(report)
+        other = service.import_report(self.db, report, "失败报告", self.admin)
+        with self.assertRaises(BusinessException):
+            service.save_review(self.db, other["id"], "c0:knowledge", self.decision(
+                status="reviewed", answer_correct=True, citations_support=True), self.admin)
+        with self.assertRaises(BusinessException):
+            service.get_case(self.db, run_id, "unknown")
+
+    def test_editing_submitted_review_as_draft_excludes_it_until_resubmission(self):
+        run_id = self.run["id"]
+        service.save_review(self.db, run_id, "c0:knowledge", self.decision(
+            status="reviewed", answer_correct=True, citations_support=True), self.admin)
+        service.save_review(self.db, run_id, "c0:knowledge", self.decision(revision=1, notes="重审"), self.admin)
+        self.assertEqual(service.export_reviews(self.db, run_id)["cases"], [])
+        self.assertIsNone(service.get_run(self.db, run_id)["metrics"]["answer_accuracy"])
