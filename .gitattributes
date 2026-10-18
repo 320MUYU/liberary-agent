@@ -1,0 +1,2 @@
+# These official text snapshots are hashed byte-for-byte in the source manifest.
+evals/hust-library/snapshots/*.md text eol=lf

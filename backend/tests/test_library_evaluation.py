@@ -145,6 +145,16 @@ class LibraryEvaluationTest(unittest.TestCase):
         self.assertEqual(answer["content"], self.answer["content"])
         self.assertEqual(trace["task_types"], ["knowledge"])
 
+    def test_equivalent_official_sources_can_satisfy_one_required_evidence_group(self):
+        case = copy.deepcopy(self.suite["cases"][0])
+        case["expected_source_keys"] = ["rules", "alternative"]
+        case["expected_source_groups"] = [["rules", "alternative"]]
+        case["evidence"].append({"source_key": "alternative", "quote": "本科生可借20册"})
+        bound = validate_bindings(self.suite, self.bindings)
+        bound["alternative"] = {**bound["rules"], "document_id": 11}
+        record = make_record(case, self.answer, bound, self.previews, 10)
+        self.assertTrue(record["contract_pass"])
+
     def test_conversation_runner_advances_only_current_ready_task_without_confirmation(self):
         seen = []
         request_id = None

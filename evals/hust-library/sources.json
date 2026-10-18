@@ -1,0 +1,95 @@
+{
+  "corpus_key": "hust-library",
+  "institution": "华中科技大学图书馆",
+  "scope": "external_reference",
+  "sources": [
+    {
+      "key": "entry-rules",
+      "title": "规章制度",
+      "url": "https://lib.hust.edu.cn/index.html#/rtfDetailsBtnLink?id=1419&pid=1413",
+      "snapshot": "entry-rules.md",
+      "sha256": "e34bd32fa037362773af96843831030b9964b5d654727edbd981e0afb5da56fd",
+      "observed_at": "2026-10-18T17:36:23+08:00",
+      "published_at": null,
+      "effective_at": null,
+      "category": "entry"
+    },
+    {
+      "key": "campus-card",
+      "title": "校园卡在图书馆使用管理办法",
+      "url": "https://lib.hust.edu.cn/index.html#/rtfDetailsBtnLink?id=1423&pid=1387",
+      "snapshot": "campus-card.md",
+      "sha256": "d1ededc2dca9cf76fc4320f47e86f9b8b5935b27e2e448ad1dd2977d17f302c1",
+      "observed_at": "2026-10-18T17:36:23+08:00",
+      "published_at": null,
+      "effective_at": null,
+      "category": "entry"
+    },
+    {
+      "key": "loan-permissions",
+      "title": "各类读者借书权限",
+      "url": "https://lib.hust.edu.cn/index.html#/rtfDetailsBtnLink?id=1426&pid=1387",
+      "snapshot": "loan-permissions.md",
+      "sha256": "77466159c63e569e255236a6a9cb720ceda3582d1257aea37cf72cb5365c1d51",
+      "observed_at": "2026-10-18T17:36:23+08:00",
+      "published_at": null,
+      "effective_at": null,
+      "category": "borrowing"
+    },
+    {
+      "key": "borrowing-service",
+      "title": "图书外借服务",
+      "url": "https://lib.hust.edu.cn/index.html#/rtfDetailsBtnLink?id=1424&pid=1387",
+      "snapshot": "borrowing-service.md",
+      "sha256": "75ecbf478b77b9502a829f213ae0c177173e3ab99e7ee06947abbc0db14f8d18",
+      "observed_at": "2026-10-18T17:36:23+08:00",
+      "published_at": null,
+      "effective_at": null,
+      "category": "borrowing"
+    },
+    {
+      "key": "book-reservations",
+      "title": "图书预约",
+      "url": "https://lib.hust.edu.cn/index.html#/rtfDetailsBtnLink?id=1428&pid=1387",
+      "snapshot": "book-reservations.md",
+      "sha256": "d67bf5b2e70ba79112e2ee891af9e2d92b8e059dfeb89e6ab6af89dae82366d7",
+      "observed_at": "2026-10-18T17:36:23+08:00",
+      "published_at": null,
+      "effective_at": null,
+      "category": "borrowing"
+    },
+    {
+      "key": "renewals",
+      "title": "图书续借",
+      "url": "https://lib.hust.edu.cn/index.html#/rtfDetailsBtnLink?id=1427&pid=1387",
+      "snapshot": "renewals.md",
+      "sha256": "7bf0d49257f0d939d0aa7319b4c02b53dbbf625a8b425956e680423b88cbb9f4",
+      "observed_at": "2026-10-18T17:36:23+08:00",
+      "published_at": null,
+      "effective_at": null,
+      "category": "return"
+    },
+    {
+      "key": "seat-network-rules",
+      "title": "图书馆座位网络预约规则",
+      "url": "https://lib.hust.edu.cn/index.html#/rtfDetailsBtnLink?id=1449&pid=1399",
+      "snapshot": "seat-network-rules.md",
+      "sha256": "5d9d6ecc22595b7f68bf6564544078de7b821ae80725185c755cf6309e04c2cc",
+      "observed_at": "2026-10-18T17:36:23+08:00",
+      "published_at": null,
+      "effective_at": null,
+      "category": "space"
+    },
+    {
+      "key": "seat-management",
+      "title": "图书馆座位预约管理办法",
+      "url": "https://lib.hust.edu.cn/index.html#/rtfDetailsBtnLink?id=1448&pid=1399",
+      "snapshot": "seat-management.md",
+      "sha256": "28c72c4f2d3916d52bdbc6042de9378bfd7d94b78b1a8b226e12d3d37adae905",
+      "observed_at": "2026-10-18T17:36:23+08:00",
+      "published_at": null,
+      "effective_at": null,
+      "category": "space"
+    }
+  ]
+}

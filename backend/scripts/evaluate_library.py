@@ -67,6 +67,11 @@ def validate_suite(suite, manifest, snapshot_root):
                 covered.add(item["source_key"])
             if covered != set(expected):
                 raise ValueError("每个预期来源都需要原文证据")
+            groups = case.get("expected_source_groups", [[key] for key in expected])
+            if (not isinstance(groups, list) or not groups
+                    or any(not isinstance(group, list) or not group or any(key not in expected for key in group) for group in groups)
+                    or set(key for group in groups for key in group) != set(expected)):
+                raise ValueError("可替代证据组必须完整覆盖预期来源")
         elif expected or facts or evidence or not case.get("abstention_reason"):
             raise ValueError("无答案用例须说明原因，不能捏造来源和标准事实")
         if (not isinstance(case.get("prelude", []), list) or len(case.get("prelude", [])) > 3
@@ -127,7 +132,8 @@ def make_record(case, answer, bound, previews, latency_ms, *, error=None, trace=
     used = [source for source in sources if source.get("number") in cited]
     expected = {bound[key]["document_id"] for key in case["expected_source_keys"]}
     actual = {source.get("document_id") for source in used}
-    coverage = len(expected & actual) / len(expected) if expected else None
+    groups = case.get("expected_source_groups", [[key] for key in case["expected_source_keys"]])
+    coverage = sum(bool({bound[key]["document_id"] for key in group} & actual) for group in groups) / len(groups) if groups else None
     preview_by_id = {row["chunk_id"]: row for row in previews}
     pinned = {row["document_id"]: row["version_number"] for row in bound.values()}
     previews_valid = bool(used) and all(
@@ -138,9 +144,10 @@ def make_record(case, answer, bound, previews, latency_ms, *, error=None, trace=
         for source in used
     )
     used_chunks = {source.get("chunk_id") for source in used}
-    present = sum(any(row["chunk_id"] in used_chunks and row.get("document_id") == bound[item["source_key"]]["document_id"]
-        and compact(item["quote"]) in compact(row.get("text", "")) for row in previews) for item in case["evidence"])
-    quote_coverage = present / len(case["evidence"]) if case["evidence"] else None
+    supported_keys = {item["source_key"] for item in case["evidence"] if any(
+        row["chunk_id"] in used_chunks and row.get("document_id") == bound[item["source_key"]]["document_id"]
+        and compact(item["quote"]) in compact(row.get("text", "")) for row in previews)}
+    quote_coverage = sum(bool(set(group) & supported_keys) for group in groups) / len(groups) if groups else None
     citation_valid = _valid_citations(answer) and len({row.get("number") for row in sources}) == len(sources)
     abstained = (not error and answer.get("retrieval_status") in {"no_match", "insufficient_evidence"}
                  and not sources and bool(answer.get("content", "").strip()))
@@ -151,6 +158,7 @@ def make_record(case, answer, bound, previews, latency_ms, *, error=None, trace=
         "prelude": case.get("prelude", []), "answerable": case["answerable"],
         "expected_facts": case["expected_facts"], "expected_evidence": case["evidence"],
         "expected_document_ids": sorted(expected), "cited_document_ids": sorted(value for value in actual if type(value) is int),
+        "expected_source_groups": groups,
         "expected_source_coverage": coverage, "evidence_quote_coverage": quote_coverage,
         "citation_valid": citation_valid, "previews_valid": previews_valid, "abstained": bool(abstained),
         "contract_pass": bool(passed), "latency_ms": round(latency_ms, 2), "error": error,
