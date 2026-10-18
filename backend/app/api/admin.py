@@ -30,6 +30,7 @@ from app.schemas.user import (
     UserStatusUpdateRequest,
 )
 from app.services import (
+    admin_tasks,
     equipment_service,
     lab_service,
     reservation_service,
@@ -37,6 +38,11 @@ from app.services import (
 )
 
 router = APIRouter(prefix="/admin", tags=["管理员接口"])
+
+
+@router.get("/tasks/summary")
+def admin_task_summary(_: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return Response.success(data=admin_tasks.task_summary(db))
 
 
 @router.get("/user/list")
