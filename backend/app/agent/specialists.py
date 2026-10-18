@@ -7,6 +7,7 @@ from app.schemas.workflow import WorkflowTask
 
 
 SPECIALISTS = {"borrow": "library", "my_loans": "library", "return": "library", "reservation": "space"}
+SPECIALISTS.update({"chat": "conversation", "knowledge": "knowledge", "space_query": "space"})
 
 
 def invoke_specialist(db, user_id, step, conditions, budget, operation="retry", payload=None):

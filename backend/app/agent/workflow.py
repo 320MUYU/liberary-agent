@@ -16,6 +16,7 @@ from app.common.exceptions import BusinessException
 from app.models.users import User
 from app.models.workflow import WorkflowRun, WorkflowStep
 from app.services.space_discovery import SpaceConditions
+from app.schemas.workflow import WorkflowPlan
 
 
 MAX_MODELS, MAX_TOOLS, MAX_SECONDS = 13, 24, 180
@@ -41,9 +42,12 @@ def steps_for(db, workflow_id):
     return db.query(WorkflowStep).filter_by(workflow_id=workflow_id).populate_existing().order_by(WorkflowStep.position).all()
 
 
-def create_workflow(db, user_id, request_id, query, conditions=None):
+def create_workflow(db, user_id, request_id, query, conditions=None, *, plan=None, context=None):
     normalized = SpaceConditions.model_validate(conditions).model_dump(mode="json") if conditions else None
     request = {"query": query, "conditions": normalized}
+    if plan is not None:
+        request["plan"] = WorkflowPlan.model_validate(plan).model_dump()
+        request["context"] = context or []
     existing = db.query(WorkflowRun).filter_by(workflow_id=request_id).first()
     if existing is not None:
         run = owned(db, user_id, request_id)
@@ -142,7 +146,9 @@ def operate(db, user_id, workflow_id, operation="view", payload=None):
             query = run.query + "\n补充：" + payload["text"]
             if len(query) > 1000:
                 raise BusinessException("合计描述不能超过1000字，请新建任务", 422)
-            run.query = query; run.status = "planning"; run.message = None; db.commit()
+            run.query = query; run.status = "planning"; run.message = None
+            run.request = {k: v for k, v in run.request.items() if k != "plan"}
+            db.commit()
         elif operation == "conditions":
             if run.status in {"cancelled", "completed"} or not any(s.spec["task_type"] == "reservation" for s in steps):
                 raise BusinessException("当前任务不接受预约条件", 409)
@@ -176,7 +182,7 @@ def operate(db, user_id, workflow_id, operation="view", payload=None):
                     phase: str
                 graph = StateGraph(State)
                 def plan(_):
-                    plan_result = plan_workflow(run.query, budget)
+                    plan_result = WorkflowPlan.model_validate(run.request["plan"]) if "plan" in run.request else plan_workflow(run.query, budget)
                     if plan_result.clarification:
                         run.status = "needs_clarification"; run.message = plan_result.clarification
                     else:
