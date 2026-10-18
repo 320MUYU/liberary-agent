@@ -16,6 +16,7 @@ from app.schemas.ai import ChatRequest, ChatResponse, ChatSource
 from app.services.embedding_service import create_embeddings, get_embedding_profile
 from app.services.vector_store import ChromaVectorStore
 from app.services.rag_retrieval import retrieve, expand_neighbors, source_rows
+from app.agent.policy import BudgetExceeded
 
 
 NO_MATCH = "知识库暂无足够依据回答这个问题，请查看已发布的馆规或联系管理员确认。"
@@ -39,16 +40,18 @@ def _remaining(deadline: float) -> float:
     return seconds
 
 
-def _invoke(model, messages, deadline: float) -> str:
+def _invoke(model, messages, deadline: float, budget=None) -> str:
     remaining = _remaining(deadline)
     try:
+        if budget is not None:
+            budget.consume("model")
         if isinstance(model, BaseChatModel):
             response = model.invoke(messages, timeout=remaining)
         else:
             response = model.invoke(messages)
         _remaining(deadline)
         return str(response.text).strip()
-    except BusinessException:
+    except (BusinessException, BudgetExceeded):
         raise
     except Exception:
         raise BusinessException(code=503, message="知识库回答服务暂时不可用，请稍后重试") from None
@@ -66,7 +69,7 @@ def _history(data: ChatRequest) -> list[dict]:
     return list(reversed(selected))
 
 
-def _query(data: ChatRequest, model, history: list[dict], deadline: float) -> str:
+def _query(data: ChatRequest, model, history: list[dict], deadline: float, budget=None) -> str:
     limit = getattr(settings, "RAG_QUERY_CHARS", 1000)
     question = data.messages[-1].content[:limit]
     if not history:
@@ -74,7 +77,7 @@ def _query(data: ChatRequest, model, history: list[dict], deadline: float) -> st
     rewritten = _invoke(model, [
         SystemMessage(content=REWRITE_SYSTEM_PROMPT),
         HumanMessage(content=json.dumps({"history": history, "question": question}, ensure_ascii=False)),
-    ], deadline)
+    ], deadline, budget)
     # A rewrite is only an embedding input, never a system or answer instruction.
     if not rewritten or len(rewritten) > limit or "\n" in rewritten or "```" in rewritten:
         return question
@@ -141,12 +144,15 @@ def knowledge_chat(
     *,
     embeddings=None,
     vector_store=None,
+    budget=None,
 ) -> ChatResponse:
     if not getattr(settings, "RAG_ENABLED", False):
         raise BusinessException(code=503, message="知识库问答尚未启用，请联系管理员")
     if db is None:
         raise BusinessException(code=503, message="知识库数据服务暂时不可用，请稍后重试")
     deadline = time.monotonic() + getattr(settings, "RAG_REQUEST_TIMEOUT_SECONDS", 60)
+    if budget is not None:
+        deadline = min(deadline, time.monotonic() + budget.remaining())
     try:
         profile = get_embedding_profile()
         history = _history(data)
@@ -154,7 +160,7 @@ def knowledge_chat(
             from app.services.ai_services import get_knowledge_model
 
             model = get_knowledge_model()
-        query = _query(data, model, history, deadline)
+        query = _query(data, model, history, deadline, budget)
         if embeddings is None:
             embeddings = create_embeddings(
                 timeout=min(getattr(settings, "EMBEDDING_TIMEOUT_SECONDS", 15), _remaining(deadline)),
@@ -166,6 +172,8 @@ def knowledge_chat(
         queries = [query]
         if getattr(settings, "RAG_RETRIEVAL_MODE", "vector") == "hybrid":
             queries = [data.messages[-1].content[:getattr(settings, "RAG_QUERY_CHARS", 1000)], query]
+        if budget is not None:
+            budget.consume("tool")
         retrieval = retrieve(db, queries, profile, config=settings, embeddings=embeddings,
                              store=store, deadline=deadline)
         rows = retrieval.rows
@@ -188,7 +196,7 @@ def knowledge_chat(
             message_type = HumanMessage if message["role"] == "user" else AIMessage
             messages.append(message_type(content=message["content"]))
         messages.append(HumanMessage(content=data.messages[-1].content))
-        answer = _invoke(model, messages, deadline)
+        answer = _invoke(model, messages, deadline, budget)
         citation_tokens = re.findall(r"[\[【［]([0-9,，、\s\-–]+)[\]】］]", answer)
         allowed = {source.number for source in sources}
         if (
@@ -209,7 +217,7 @@ def knowledge_chat(
             return ChatResponse(content=NO_MATCH, retrieval_status="no_match")
         _remaining(deadline)
         return ChatResponse(content=answer, sources=sources, retrieval_status="matched")
-    except BusinessException:
+    except (BusinessException, BudgetExceeded):
         raise
     except Exception:
         raise BusinessException(code=503, message="知识库检索服务暂时不可用，请稍后重试") from None

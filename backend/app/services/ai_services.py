@@ -64,25 +64,32 @@ def _create_chat_model(max_retries: int, max_tokens: int | None = None) -> ChatD
     )
 
 
-def build_model_messages(data: ChatRequest, *, now=None) -> list[BaseMessage]:
+def build_model_messages(data: ChatRequest, *, now=None, unified=False) -> list[BaseMessage]:
     context = json.dumps(time_context(now), ensure_ascii=False)
-    messages = [SystemMessage(content=SYSTEM_PROMPT + "\n服务端当前时间：" + context)]
+    prompt = SYSTEM_PROMPT
+    if unified:
+        prompt = prompt.replace("当前普通聊天模式尚未接入 RAG 知识库；馆规问答请切换知识库模式。",
+            "你负责统一会话中的普通回答和空间只读查询；馆规由协调器交给知识专家处理。")
+        prompt = prompt.replace("办理预约请引导至空间预约助手，保留现有选择和人工确认。",
+            "办理预约时提示用户在当前聊天提出预约需求，再通过任务卡片选择和确认。")
+    messages = [SystemMessage(content=prompt + "\n服务端当前时间：" + context)]
     for message in data.messages:
         message_type = HumanMessage if message.role == "user" else AIMessage
         messages.append(message_type(content=message.content))
     return messages
 
 
-def chat(data: ChatRequest, model: BaseChatModel | None = None, db=None, user_id=None) -> ChatResponse:
+def chat(data: ChatRequest, model: BaseChatModel | None = None, db=None, user_id=None, *, budget=None, unified=False) -> ChatResponse:
+    shared_budget = budget is not None
     if data.mode == "knowledge":
         from app.services.rag_service import knowledge_chat
 
-        return knowledge_chat(data, db, model=model)
+        return knowledge_chat(data, db, model=model, **({"budget": budget} if budget is not None else {}))
     try:
         chat_model = model or get_chat_model()
-        budget = RunBudget()
+        budget = budget or RunBudget()
         now = now_beijing()
-        messages = build_model_messages(data, now=now)
+        messages = build_model_messages(data, now=now, unified=unified)
         while True:
             budget.consume("model")
             # Each turn uses the remaining shared deadline, with no hidden retries
@@ -111,6 +118,8 @@ def chat(data: ChatRequest, model: BaseChatModel | None = None, db=None, user_id
                     return ChatResponse(content=question)
                 messages.append(ToolMessage(content=json.dumps(result, ensure_ascii=False), tool_call_id=call["id"]))
     except BudgetExceeded:
+        if shared_budget:
+            raise
         return ChatResponse(content="本次查询已达到执行上限，请缩小范围后重试。")
     except BusinessException:
         raise

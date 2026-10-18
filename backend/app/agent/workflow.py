@@ -70,7 +70,7 @@ def create_workflow(db, user_id, request_id, query, conditions=None, *, plan=Non
 def record_result(step, result):
     step.result = result
     status = result["status"]
-    if status in RECEIPTS or (step.spec["read_only"] and status in SELECTIONS | {"no_results"}):
+    if status in RECEIPTS | {"answered"} or (step.spec["read_only"] and status in SELECTIONS | {"no_results"}):
         step.status = "completed"
     elif status == "cancelled":
         step.status = "cancelled"
@@ -190,12 +190,16 @@ def operate(db, user_id, workflow_id, operation="view", payload=None):
                             db.add(WorkflowStep(workflow_id=workflow_id, position=position,
                                 child_run_id=str(uuid5(NAMESPACE_URL, f"workflow:{workflow_id}:{position}")),
                                 spec=task.model_dump()))
-                        run.status = "needs_conditions" if not run.conditions and any(t.task_type == "reservation" for t in plan_result.steps) else "ready"
+                        run.status = "needs_conditions" if not run.conditions and plan_result.steps[0].task_type == "reservation" else "ready"
                         run.message = "请明确填写并核对预约日期、时段、人数和用途。" if run.status == "needs_conditions" else "请核对计划，开始后仍需逐项选择和确认。"
                     db.commit()
                     return {}
                 def delegate(_):
                     step = next(s for s in steps if s.status not in DONE)
+                    if step.spec["task_type"] == "reservation" and not run.conditions:
+                        run.status = "needs_conditions"; run.message = "请核对并确认预约日期、时段、人数和用途。"
+                        db.commit()
+                        return {}
                     step.status = "running"; db.commit()
                     result = invoke_specialist(db, user_id, step,
                         SpaceConditions.model_validate(run.conditions) if run.conditions else None, budget)

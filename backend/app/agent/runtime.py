@@ -47,7 +47,7 @@ def owned_run(db, user_id, run_id):
     return run
 
 
-def start_run(db, user_id, request_id, query, task_type="borrow", conditions=None, *, budget=None):
+def start_run(db, user_id, request_id, query, task_type="borrow", conditions=None, *, budget=None, context=None):
     if task_type not in {"borrow", "my_loans", "return", "reservation"}:
         raise BusinessException("不支持的任务类型", 422)
     if task_type == "reservation":
@@ -73,7 +73,7 @@ def start_run(db, user_id, request_id, query, task_type="borrow", conditions=Non
         action = db.query(AgentReservationAction).filter_by(run_id=request_id, user_id=user_id).first()
         if action is None or action.conditions != conditions.model_dump(mode="json"):
             raise BusinessException("任务编号已绑定其他预约条件", 409)
-    return run_graph(db, user_id, request_id, "retry", budget=budget)
+    return run_graph(db, user_id, request_id, "retry", budget=budget, context=context)
 
 
 def graph_view(run_id, snapshot, db=None, user_id=None):
@@ -130,7 +130,7 @@ def graph_view(run_id, snapshot, db=None, user_id=None):
             "receipt": state.get("receipt"), "action": state.get("action")}
 
 
-def run_graph(db, user_id, run_id, operation="view", payload=None, *, budget=None):
+def run_graph(db, user_id, run_id, operation="view", payload=None, *, budget=None, context=None):
     if budget is None:
         from app.models.workflow import WorkflowStep
         if db.query(WorkflowStep.id).filter_by(child_run_id=run_id).first():
@@ -260,6 +260,8 @@ def run_graph(db, user_id, run_id, operation="view", payload=None, *, budget=Non
                 if any(task.interrupts for task in snapshot.tasks) or (snapshot.values and not snapshot.next):
                     return view
                 inputs = None if snapshot.values else {"query": query, "task_type": task_type, "books": [], "messages": [], "model_calls": 0, "tool_calls": 0}
+                if inputs is not None and context:
+                    inputs["context"] = context
                 if inputs is not None and conditions is not None:
                     inputs["conditions"] = conditions.model_dump(mode="json")
             graph.invoke(inputs, config)
