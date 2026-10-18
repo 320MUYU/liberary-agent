@@ -1,0 +1,112 @@
+name: lab-agent-local
+
+x-backend: &backend
+  image: lab-agent-backend:local
+  build:
+    context: .
+    dockerfile: infra/docker/backend.Dockerfile
+  env_file:
+    - path: ./infra/docker/backend.env
+      format: raw
+  environment:
+    TZ: Asia/Shanghai
+  restart: unless-stopped
+  init: true
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: lab_agent
+      MYSQL_USER: lab_agent
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Run infra/docker/prepare.ps1 first}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Run infra/docker/prepare.ps1 first}
+      TZ: Asia/Shanghai
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h 127.0.0.1 -u $$MYSQL_USER $$MYSQL_DATABASE -e 'SELECT 1' >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+
+  chroma:
+    <<: *backend
+    command: ["chroma", "run", "--path", "/chroma", "--host", "0.0.0.0", "--port", "8001"]
+    volumes:
+      - chroma_data:/chroma
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/api/v2/heartbeat', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  api:
+    <<: *backend
+    volumes:
+      - app_data:/app/data
+      - uploads:/app/uploads
+    depends_on:
+      mysql: {condition: service_healthy}
+      chroma: {condition: service_healthy}
+      mcp: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "/opt/deploy/healthcheck.py", "api"]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+      start_period: 30s
+
+  mcp:
+    <<: *backend
+    command: ["python", "-m", "uvicorn", "app.mcp.library:app", "--host", "0.0.0.0", "--port", "8002"]
+    volumes:
+      - app_data:/app/data
+    depends_on:
+      mysql: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "/opt/deploy/healthcheck.py", "mcp"]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+      start_period: 20s
+
+  worker:
+    <<: *backend
+    command: ["python", "knowledge_worker.py"]
+    volumes:
+      - app_data:/app/data
+    depends_on:
+      api: {condition: service_healthy}
+
+  web:
+    image: lab-agent-frontend:local
+    build:
+      context: .
+      dockerfile: infra/docker/frontend.Dockerfile
+    ports:
+      - "127.0.0.1:${WEB_PORT:-18081}:80"
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+
+volumes:
+  mysql_data:
+  chroma_data:
+  app_data:
+  uploads:

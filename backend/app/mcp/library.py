@@ -2,6 +2,7 @@ from contextvars import ContextVar
 from typing import Annotated, Any, Literal
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field, StrictBool
 from starlette.responses import JSONResponse
 
@@ -12,6 +13,7 @@ from app.agent.policy import RunBudget
 from app.agent.tools import execute_read_tool, error
 from app.common.exceptions import BusinessException
 from app.database import SessionLocal
+from app.config import settings
 from app.schemas.loan import LoanStatus
 from app.services.space_discovery import SpaceConditions
 
@@ -43,7 +45,13 @@ class Authenticate:
 
 
 def create_server(session_factory=SessionLocal):
-    server = FastMCP("library", host="127.0.0.1", port=8002, stateless_http=True, json_response=True)
+    hosts = [f"[{host}]" if ":" in host else host for host in settings.AGENT_MCP_ALLOWED_HOSTS]
+    server = FastMCP("library", host="127.0.0.1", port=8002, stateless_http=True, json_response=True,
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=hosts + [host + ":*" for host in hosts],
+            allowed_origins=[f"{scheme}://{host}{suffix}" for scheme in ("http", "https")
+                for host in hosts for suffix in ("", ":*")]))
 
     def read(name, arguments):
         claims = identity.get()

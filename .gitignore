@@ -30,3 +30,7 @@ dist-ssr/
 .DS_Store
 Thumbs.db
 *.log
+
+# Docker credentials, snapshots and migration reports stay local.
+infra/docker/backend.env
+infra/docker/*.local.json

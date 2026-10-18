@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     AGENT_CHECKPOINT_PATH: Path = BASE_DIR / "data" / "agent" / "checkpoints.sqlite"
     AGENT_TOOL_TRANSPORT: Literal["local", "mcp"] = "local"
     AGENT_MCP_URL: str = "http://127.0.0.1:8002/mcp"
+    AGENT_MCP_ALLOWED_HOSTS: list[str] = ["127.0.0.1", "localhost", "::1"]
     RAG_ENABLED: bool = False
     EMBEDDING_PROVIDER: Literal["dashscope", "openai-compatible"] = "dashscope"
     EMBEDDING_BASE_URL: str = ""

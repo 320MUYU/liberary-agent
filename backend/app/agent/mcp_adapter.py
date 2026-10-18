@@ -40,13 +40,17 @@ def verify_token(token):
                       options={"require": ["sub", "aud", "iss", "iat", "exp", "scope"]})
 
 
-async def _call(user_id, name, arguments, timeout, action_id=None, confirmed=None, *, action_type="borrow", read_scope="catalogue:read"):
-    url = settings.AGENT_MCP_URL
+def validate_endpoint(url):
     parsed = urlsplit(url)
     if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username
             or parsed.password or parsed.query or parsed.fragment
-            or (parsed.scheme == "http" and parsed.hostname not in {"127.0.0.1", "localhost", "::1"})):
+            or (parsed.scheme == "http" and parsed.hostname not in settings.AGENT_MCP_ALLOWED_HOSTS)):
         raise ValueError("Invalid MCP endpoint")
+    return url
+
+
+async def _call(user_id, name, arguments, timeout, action_id=None, confirmed=None, *, action_type="borrow", read_scope="catalogue:read"):
+    url = validate_endpoint(settings.AGENT_MCP_URL)
     token = issue_token(user_id, action_id, confirmed, action_type=action_type, read_scope=read_scope)
     async with asyncio.timeout(timeout):
         async with httpx.AsyncClient(timeout=timeout, trust_env=False, follow_redirects=False,
