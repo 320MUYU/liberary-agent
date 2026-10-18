@@ -4,11 +4,9 @@ import argparse
 import copy
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import re
-import statistics
 import sys
 import time
 from urllib.parse import urlsplit
@@ -18,6 +16,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
+from app.services.evaluation_reports import apply_reviews, report_identity, summarize
 from app.services.library_corpus import load_manifest, read_snapshot
 from scripts.evaluate_rag import _valid_citations
 from scripts.evaluate_retrieval import evaluate as evaluate_retrieval
@@ -163,56 +162,6 @@ def make_record(case, answer, bound, previews, latency_ms, *, error=None, trace=
         "citation_valid": citation_valid, "previews_valid": previews_valid, "abstained": bool(abstained),
         "contract_pass": bool(passed), "latency_ms": round(latency_ms, 2), "error": error,
         "answer": answer, "previews": previews, "trace": trace or {}, "review": {"status": "pending_human"}}
-
-
-def summarize(records):
-    average = lambda values: round(statistics.mean(values), 4) if values else None
-    positive = [row for row in records if row["answerable"]]
-    negative = [row for row in records if not row["answerable"]]
-    matched = [row for row in records if row["answer"].get("retrieval_status") == "matched"]
-    reviewed = [row for row in records if row.get("review", {}).get("status") == "reviewed"]
-    latencies = sorted(row["latency_ms"] for row in records)
-    return {"total": len(records), "errors": sum(bool(row["error"]) for row in records),
-        "contract_passed": sum(row["contract_pass"] for row in records),
-        "contract_pass_rate": average([row["contract_pass"] for row in records]),
-        "cited_expected_source_coverage": average([row["expected_source_coverage"] for row in positive]),
-        "citation_validity_rate": average([row["citation_valid"] for row in matched]),
-        "abstention_expected": len(negative), "abstention_rate": average([row["abstained"] for row in negative]),
-        "latency_mean_ms": average(latencies),
-        "latency_p95_ms": latencies[math.ceil(0.95 * len(latencies)) - 1] if latencies else None,
-        "human_reviewed": len(reviewed), "human_review_coverage": len(reviewed) / len(records) if records else 0,
-        "answer_accuracy": average([row["review"]["answer_correct"] for row in reviewed]),
-        "citation_support_rate": average([row["review"]["citations_support"] for row in reviewed])}
-
-
-def report_identity(report):
-    content = copy.deepcopy(report)
-    for key in ("report_id", "metrics", "review_status", "automatic_gate_pass"):
-        content.pop(key, None)
-    for row in content.get("results", []):
-        row.pop("review", None)
-    return hashlib.sha256(json.dumps(content, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
-
-
-def apply_reviews(report, reviews):
-    if reviews.get("report_id") != report.get("report_id") or report_identity(report) != report["report_id"]:
-        raise ValueError("审核表与本次回答报告不匹配")
-    records = {row["id"]: row for row in report["results"]}
-    seen = set()
-    for item in reviews.get("cases", []):
-        if (item.get("id") not in records or item["id"] in seen or not isinstance(item.get("reviewer"), str)
-                or not item["reviewer"].strip() or type(item.get("answer_correct")) is not bool
-                or type(item.get("citations_support")) is not bool):
-            raise ValueError("人工审核须指定唯一题号、审核人及明确的正确性判断")
-        if records[item["id"]]["error"] and item["answer_correct"]:
-            raise ValueError("服务错误不能审核为正确回答")
-        seen.add(item["id"])
-    for item in reviews.get("cases", []):
-        records[item["id"]]["review"] = {"status": "reviewed", **{key: item.get(key) for key in (
-            "reviewer", "answer_correct", "citations_support", "notes")}}
-    report["metrics"] = summarize(report["results"])
-    report["review_status"] = "reviewed" if report["metrics"]["human_review_coverage"] == 1 else "pending_human"
-    return report
 
 
 def request(client, url, payload=None):
