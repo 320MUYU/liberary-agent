@@ -149,8 +149,46 @@ Edge 真实浏览器在 1440×1000 桌面与 390×844 手机视口验证了一�
 ## 仍需完成的工作
 
 - 由人工审核题目和真实答案，填写本次报告对应的审核表；目前没有馆方现场验收或人类语义正确率结论。
-- 改善上述两道题在统一委派后的证据检索表现，并用新的独立验证题复验。
+- 两道题的委派缺陷已修复并完成开发回归（见下节）；仍需新的独立人工标注题复验。
 - 按真实读者问法扩大独立标注集和语料规模，再确定阈值、性能与持续回归门槛。8 份资料的小样本不能代表大规模知识库效果。
 - 图片/OCR、官网变化定期同步、实时原馆业务、管理员审批 Agent、多实例部署及跨设备会话历史仍在后续范围。
 
 简历可描述“接入华科官方公开资料，构建版本可追溯 RAG 语料与 50 题分组评测，验证统一聊天路由、引用证据和拒答行为”；没有人工审核前，不写“馆方验收通过”或“答案准确率达到某值”。
+
+## 知识委派修复与人工审核入口（2026-10-18）
+
+后续诊断已确认：c10 的委派包装文本改变检索排序，最终证据缺少《图书预约》；v20
+的协调器加入了用户没有提出的“本系统/阅见”范围，导致外部馆规被过滤。修复不降低拒答标准：
+用户原文控制范围校验、追问改写和生成回答，协调器 query 仅作检索提示；委派标签不再参与检索。
+诊断、限制及回归记录见 [知识委派诊断](rag-delegation-diagnosis.md)。上文首次验收结果原样保留。
+
+原有 50 题的两入口回答共 100 条，已准备未填写的审核工作副本；新回归报告另有自己的审核表。
+所有路径均相对项目根目录，运行材料保持 Git 忽略，不含凭证：
+
+| 审核对象 | 阅读报告 | 填写工作副本 |
+| --- | --- | --- |
+| 首次调参最终复测，40 条回答 | `backend/data/hust-library-acceptance/calibration-release-report.md` | `backend/data/rag-delegation-acceptance/manual-review/calibration-release-report.reviews.json` |
+| 首次验证，60 条回答 | `backend/data/hust-library-acceptance/validation-report.md` | `backend/data/rag-delegation-acceptance/manual-review/validation-report.reviews.json` |
+| 修复后回归，16 条回答 | `backend/data/rag-delegation-acceptance/regression-report.md` | `backend/data/rag-delegation-acceptance/manual-review/regression-report.reviews.json` |
+
+人工逐题核对：问题及证据标注是否准确；回答中的条件、数字、否定和适用机构是否正确；
+实际引用的原文是否支持每项结论。填写可追溯的 `reviewer`、布尔值 `answer_correct`、
+`citations_support` 和备注。不确定或未审核项保留 `null`，不要批量填写 `true`。
+报告编号绑定具体回答，首次报告的判断不能复制到修复后的报告。
+
+现有 `review` 命令只接受已填写完整的条目，不接受模板中的空白条目。
+本地辅助脚本 `backend/data/rag-delegation-acceptance/manual-review/prepare_submission.py`
+将完整判断导出到新提交文件，保留工作副本中的未审核项；填写了一半的条目会报错，避免漏交。
+审核后在 `backend` 执行，例如（输出已存在时使用新的文件名）：
+
+```powershell
+.venv\Scripts\python.exe data/rag-delegation-acceptance/manual-review/prepare_submission.py data/rag-delegation-acceptance/manual-review/validation-report.reviews.json data/rag-delegation-acceptance/manual-review/validation-submitted.json
+.venv\Scripts\python.exe scripts/evaluate_library.py review --report data/hust-library-acceptance/validation-report.json --reviews data/rag-delegation-acceptance/manual-review/validation-submitted.json --output data/rag-delegation-acceptance/manual-review/validation-reviewed.json
+
+.venv\Scripts\python.exe data/rag-delegation-acceptance/manual-review/prepare_submission.py data/rag-delegation-acceptance/manual-review/regression-report.reviews.json data/rag-delegation-acceptance/manual-review/regression-submitted.json
+.venv\Scripts\python.exe scripts/evaluate_library.py review --report data/rag-delegation-acceptance/regression-report.json --reviews data/rag-delegation-acceptance/manual-review/regression-submitted.json --output data/rag-delegation-acceptance/manual-review/regression-reviewed.json
+```
+
+`review` 只汇总人工填写内容，不调用模型；空白工作副本导出空提交后，汇总仍为待审核。
+新措辞题由开发代理辅助编写，复用了历史题的主要事实，不是独立人工标注的新验证集。
+修复后的旧题只作回归；正式效果结论仍需人工审核和新的独立题集。
