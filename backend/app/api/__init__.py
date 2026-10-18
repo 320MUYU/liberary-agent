@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from app.api.workflow import router as workflow_router
+from app.api.conversation import router as conversation_router
 from app.api.agent import router as agent_router
 from app.api.ai import router as ai_router
 from app.api.admin import router as admin_router
@@ -13,6 +14,7 @@ from app.api.reservation import router as reservation_router
 from app.api.user import router as user_router
 
 api = APIRouter(prefix="/api")
+api.include_router(conversation_router)
 api.include_router(workflow_router)
 api.include_router(agent_router)
 
