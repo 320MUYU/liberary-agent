@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { getUserInfo } from '@/auth'
 import ConversationTaskCard from '@/components/ConversationTaskCard.vue'
+import AiAnswerContent from '@/components/AiAnswerContent.vue'
 import {
   createConversation,
   getConversation,
@@ -234,13 +235,12 @@ onMounted(refresh)
             <span class="assistant-label"
               ><el-icon><MagicStick /></el-icon> 阅见 AI</span
             >
-            <p
+            <AiAnswerContent
               v-if="turn.reply && !textOnly(turn)"
               class="reply-text"
               :class="{ failed: turn.status === 'failed' }"
-            >
-              {{ turn.reply.content }}
-            </p>
+              :content="turn.reply.content"
+            />
             <ConversationTaskCard
               v-if="taskFor(turn)"
               :task="taskFor(turn)"

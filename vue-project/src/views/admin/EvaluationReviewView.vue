@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
+import AiAnswerContent from '@/components/AiAnswerContent.vue'
 import { getUserInfo } from '@/auth'
 import {
   listEvaluationRuns,
@@ -346,7 +347,7 @@ onUnmounted(() => {
           <div v-if="currentCase.error" class="review-error">服务错误：{{ currentCase.error }}</div>
           <section class="evidence-block answer-block">
             <h4>实际回答</h4>
-            <pre>{{ currentCase.answer?.content || '（无回答）' }}</pre>
+            <AiAnswerContent :content="currentCase.answer?.content || '（无回答）'" allow-raw />
           </section>
           <section class="evidence-block">
             <h4>预期事实与标注证据</h4>

@@ -33,6 +33,15 @@ class FakeChatModel:
 
 
 class AIServiceTest(unittest.TestCase):
+    def test_structured_answer_survives_generation_and_requests_readable_format(self):
+        content = "**结论：**可以提交申请。\n\n1. 选择空间。\n2. 核对时间，提交后等待审核。"
+        model = FakeChatModel(AIMessage(content=content))
+        result = ai_services.chat(self.request(), model=model)
+        self.assertEqual(result.content, content)
+        self.assertIn("结论在前", model.received_messages[0].content)
+        self.assertIn("Markdown", model.received_messages[0].content)
+        self.assertIn("不能替用户提交或修改预约", model.received_messages[0].content)
+
     def request(self):
         return ChatRequest(
             messages=[

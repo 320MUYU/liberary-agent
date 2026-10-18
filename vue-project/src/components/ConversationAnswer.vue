@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import AiAnswerContent from '@/components/AiAnswerContent.vue'
 import { getKnowledgeSourceApi } from '@/api/knowledgeApi'
 
 defineProps({ result: { type: Object, required: true } })
@@ -25,7 +26,7 @@ async function preview(item) {
 
 <template>
   <div class="conversation-answer">
-    <p class="answer-text">{{ result.content }}</p>
+    <AiAnswerContent class="answer-text" :content="result.content" />
     <div v-if="result.sources?.length" class="answer-sources" aria-label="回答来源">
       <button
         v-for="item in result.sources"
@@ -54,7 +55,6 @@ async function preview(item) {
 </template>
 
 <style scoped>
-.answer-text,
 pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

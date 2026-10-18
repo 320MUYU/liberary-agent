@@ -35,6 +35,7 @@ async function page(overrides = {}) {
     URL
   })
   const dependencies = {
+    '@/components/AiAnswerContent.vue': { default: {} },
     vue: {
       ref: (value) => ({ value }),
       computed: (fn) => ({

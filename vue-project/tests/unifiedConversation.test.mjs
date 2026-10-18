@@ -32,6 +32,7 @@ async function panel(overrides = {}, initial = {}) {
     },
     '@/auth': { getUserInfo: () => ({ id: 5 }) },
     '@/components/ConversationTaskCard.vue': { default: {} },
+    '@/components/AiAnswerContent.vue': { default: {} },
     '@/api/conversationApi': {
       createConversation: async () => snapshot,
       getConversation: async () => snapshot,

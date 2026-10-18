@@ -25,6 +25,7 @@ test('source preview renders the API text field as escaped original text', async
     { context }
   )
   const dependencies = {
+    '@/components/AiAnswerContent.vue': { default: {} },
     vue: { ref: Vue.ref },
     '@/api/knowledgeApi': {
       getKnowledgeSourceApi: async (id) => {
@@ -59,6 +60,12 @@ test('source preview renders the API text field as escaped original text', async
       (_, { slots }) =>
       () =>
         Vue.h('div', slots.default?.())
+  })
+  app.component('AiAnswerContent', {
+    props: ['content'],
+    render() {
+      return Vue.h('div', this.content)
+    }
   })
   const html = await renderToString(app)
   assert.ok(html.includes('每册图书可续借一次。'))
