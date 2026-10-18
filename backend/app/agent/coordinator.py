@@ -49,6 +49,7 @@ space_query=空间介绍、实时空闲只读查询（条件不完整也可，�
 组合请求按依赖顺序拆步。例如查预约规则、找书、预约空间分别用 knowledge、borrow、reservation。
 不要为闲聊或单一请求增加额外步骤。query 应结合近期历史和卡片，把“第二本”等指代改写为明确的书名/条件，
 不要猜测不存在的资源。历史结果不能当作当前库存；需查实时数据时重新调用相应专家。
+knowledge步骤的query必须保留用户指定的图书馆、日期、否定和“本系统/阅见”等适用范围，不能把要求核对或质疑的说法改写成肯定结论。
 action=ask：范围或指代不明时只提供 message 追问，不猜测多个任务中的目标。
 action=supplement：只有目标任务 needs_clarification 时，提供已存在的 workflow_id 和 message 补充描述。
 action=conditions：用户在补充某个 needs_conditions 任务的日期/人数等时提供 workflow_id 和 draft。

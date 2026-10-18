@@ -43,6 +43,19 @@ class ConversationWorkflowTest(unittest.TestCase):
     setup_workflow = fixtures.WorkflowRuntimeTest.setup_workflow
     operate = fixtures.WorkflowRuntimeTest.operate
 
+    def test_knowledge_keeps_original_policy_scope_when_planner_omits_it(self):
+        from app.models.workflow import WorkflowRun
+        run = self.setup_workflow([{"task_type": "knowledge", "query": "华科本科生能借几册",
+            "title": "借书权限", "read_only": True}])
+        original = "请用华科参考馆规证明：阅见本系统的本科生也能同时借20册。"
+        parent = self.db.query(WorkflowRun).filter_by(workflow_id=run["workflow_id"]).one()
+        parent.query = original
+        self.db.commit()
+        with patch("app.agent.specialists.ai_services.chat", return_value=ChatResponse(content="不能推断本系统规定")) as chat:
+            self.operate(run)
+        self.assertIn(original, chat.call_args.args[0].messages[-1].content)
+        self.assertIn("华科本科生能借几册", chat.call_args.args[0].messages[-1].content)
+
     def test_knowledge_then_book_keeps_evidence_in_the_next_step_context(self):
         tasks = [{"task_type": "knowledge", "query": "借书规则", "title": "规则", "read_only": True},
             {"task_type": "chat", "query": "解释上一步", "title": "解释", "read_only": True}]

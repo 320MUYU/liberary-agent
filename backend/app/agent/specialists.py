@@ -39,8 +39,13 @@ def invoke_specialist(db, user_id, step, conditions, budget, operation="retry", 
         if operation != "retry":
             raise BusinessException("回答步骤不接受业务操作", 409)
         context = context_for(db, step)
+        query = task.query
+        if task.task_type == "knowledge" and getattr(step, "workflow_id", None):
+            parent = db.query(WorkflowRun).filter_by(workflow_id=step.workflow_id).one()
+            # A planner rewrite cannot erase the user's institution or local-policy scope.
+            query = f"当前知识问题：{task.query}\n用户本轮原文（保留适用范围）：{parent.query}"
         data = ChatRequest(mode="knowledge" if task.task_type == "knowledge" else "chat",
-            messages=context + [{"role": "user", "content": task.query}])
+            messages=context + [{"role": "user", "content": query}])
         response = ai_services.chat(data, db=db, user_id=user_id, budget=budget, unified=True)
         return {"run_id": step.child_run_id, "status": "answered", "task_type": task.task_type,
             **response.model_dump()}
