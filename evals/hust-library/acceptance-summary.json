@@ -1,0 +1,396 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-18",
+  "scope": "真实官方公开文字来源上的项目自建自动评测；非馆方人工验收或真实用户基准。",
+  "annotation_author": "agent_assisted",
+  "annotation_review": "pending_human",
+  "human_answer_accuracy": null,
+  "human_citation_support_rate": null,
+  "runs": {
+    "calibration": {
+      "report_id": "fbc9588060dfb12153282b037e824c02c25ecdff1d91da9072d93ac73ec4129d",
+      "dataset_sha256": "61fbbcc92f6723323d659c0f8d6f67c6bf50a25357e13d5102e0b22333e3e3db",
+      "runtime": {
+        "split": "calibration",
+        "git_commit": "25701f1347c22f36ad3e3b0d161a595235fc2fd1",
+        "started_at": "2026-10-18T10:15:21.958228+00:00",
+        "model": "deepseek-v4-pro",
+        "embedding_model": "BAAI/bge-m3",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "retrieval_mode": "hybrid",
+        "rerank_enabled": true,
+        "max_distance": 0.6,
+        "top_k": 4,
+        "candidates": 20,
+        "neighbor_chunks": 1,
+        "rerank_min_score": 0.0
+      },
+      "expected_runs": 40,
+      "automatic_gate_pass": true,
+      "publication_consistent": true,
+      "metrics": {
+        "total": 40,
+        "errors": 0,
+        "contract_passed": 39,
+        "contract_pass_rate": 0.975,
+        "cited_expected_source_coverage": 0.9706,
+        "citation_validity_rate": 1,
+        "abstention_expected": 6,
+        "abstention_rate": 1,
+        "latency_mean_ms": 8694.5888,
+        "latency_p95_ms": 12085.16,
+        "human_reviewed": 0,
+        "human_review_coverage": 0.0,
+        "answer_accuracy": null,
+        "citation_support_rate": null
+      },
+      "by_entrypoint": {
+        "knowledge": {
+          "total": 20,
+          "errors": 0,
+          "contract_passed": 20,
+          "contract_pass_rate": 1,
+          "cited_expected_source_coverage": 1.0,
+          "citation_validity_rate": 1,
+          "abstention_expected": 3,
+          "abstention_rate": 1,
+          "latency_mean_ms": 7125.4645,
+          "latency_p95_ms": 9664.74,
+          "human_reviewed": 0,
+          "human_review_coverage": 0.0,
+          "answer_accuracy": null,
+          "citation_support_rate": null
+        },
+        "conversation": {
+          "total": 20,
+          "errors": 0,
+          "contract_passed": 19,
+          "contract_pass_rate": 0.95,
+          "cited_expected_source_coverage": 0.9412,
+          "citation_validity_rate": 1,
+          "abstention_expected": 3,
+          "abstention_rate": 1,
+          "latency_mean_ms": 10263.713,
+          "latency_p95_ms": 12085.16,
+          "human_reviewed": 0,
+          "human_review_coverage": 0.0,
+          "answer_accuracy": null,
+          "citation_support_rate": null
+        }
+      },
+      "retrieval": {
+        "vector": {
+          "candidate_metrics": {
+            "total": 20,
+            "k": 20,
+            "errors": 0,
+            "recall_at_k": 1.0,
+            "hit_at_k": 1,
+            "mrr_at_k": 0.8382,
+            "no_answer_false_positive_rate": 1,
+            "latency_mean_ms": 2851.906,
+            "latency_p95_ms": 3047.08
+          },
+          "final_metrics": {
+            "total": 20,
+            "k": 4,
+            "errors": 0,
+            "recall_at_k": 0.9412,
+            "hit_at_k": 0.9412,
+            "mrr_at_k": 0.8284,
+            "no_answer_false_positive_rate": 1,
+            "latency_mean_ms": 2851.906,
+            "latency_p95_ms": 3047.08
+          },
+          "rerank_applied": 0,
+          "rerank_fallbacks": 0
+        },
+        "hybrid": {
+          "candidate_metrics": {
+            "total": 20,
+            "k": 20,
+            "errors": 0,
+            "recall_at_k": 1.0,
+            "hit_at_k": 1,
+            "mrr_at_k": 0.8922,
+            "no_answer_false_positive_rate": 1,
+            "latency_mean_ms": 2884.6,
+            "latency_p95_ms": 3093.09
+          },
+          "final_metrics": {
+            "total": 20,
+            "k": 4,
+            "errors": 0,
+            "recall_at_k": 0.9412,
+            "hit_at_k": 0.9412,
+            "mrr_at_k": 0.8824,
+            "no_answer_false_positive_rate": 1,
+            "latency_mean_ms": 2884.6,
+            "latency_p95_ms": 3093.09
+          },
+          "rerank_applied": 0,
+          "rerank_fallbacks": 0
+        },
+        "hybrid_rerank": {
+          "candidate_metrics": {
+            "total": 20,
+            "k": 20,
+            "errors": 0,
+            "recall_at_k": 1.0,
+            "hit_at_k": 1,
+            "mrr_at_k": 0.8922,
+            "no_answer_false_positive_rate": 1,
+            "latency_mean_ms": 3882.368,
+            "latency_p95_ms": 4087.69
+          },
+          "final_metrics": {
+            "total": 20,
+            "k": 4,
+            "errors": 0,
+            "recall_at_k": 1.0,
+            "hit_at_k": 1,
+            "mrr_at_k": 0.9706,
+            "no_answer_false_positive_rate": 1,
+            "latency_mean_ms": 3882.368,
+            "latency_p95_ms": 4087.69
+          },
+          "rerank_applied": 20,
+          "rerank_fallbacks": 0
+        }
+      },
+      "failed_cases": [
+        {
+          "id": "c10:conversation",
+          "question": "华科图书预约支持预约哪些状态或馆区的书？",
+          "error": null,
+          "expected_source_coverage": 0.0,
+          "evidence_quote_coverage": 0.0,
+          "abstained": true,
+          "retrieval_status": "insufficient_evidence"
+        }
+      ]
+    },
+    "validation": {
+      "report_id": "cb945b85dd20c23b4a47cc64e316512d5212f14695d757bc1a2ee95d2ac6b925",
+      "dataset_sha256": "dcc7bf1292747e32786054ae658688c9c76a14d63314ee7c62fa3f7768c3b676",
+      "runtime": {
+        "split": "validation",
+        "git_commit": "25701f1347c22f36ad3e3b0d161a595235fc2fd1",
+        "started_at": "2026-10-18T10:15:27.375572+00:00",
+        "model": "deepseek-v4-pro",
+        "embedding_model": "BAAI/bge-m3",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "retrieval_mode": "hybrid",
+        "rerank_enabled": true,
+        "max_distance": 0.6,
+        "top_k": 4,
+        "candidates": 20,
+        "neighbor_chunks": 1,
+        "rerank_min_score": 0.0
+      },
+      "expected_runs": 60,
+      "automatic_gate_pass": true,
+      "publication_consistent": true,
+      "metrics": {
+        "total": 60,
+        "errors": 0,
+        "contract_passed": 59,
+        "contract_pass_rate": 0.9833,
+        "cited_expected_source_coverage": 0.98,
+        "citation_validity_rate": 1,
+        "abstention_expected": 10,
+        "abstention_rate": 1,
+        "latency_mean_ms": 9460.4552,
+        "latency_p95_ms": 19976.01,
+        "human_reviewed": 0,
+        "human_review_coverage": 0.0,
+        "answer_accuracy": null,
+        "citation_support_rate": null
+      },
+      "by_entrypoint": {
+        "knowledge": {
+          "total": 30,
+          "errors": 0,
+          "contract_passed": 30,
+          "contract_pass_rate": 1,
+          "cited_expected_source_coverage": 1.0,
+          "citation_validity_rate": 1,
+          "abstention_expected": 5,
+          "abstention_rate": 1,
+          "latency_mean_ms": 7627.7687,
+          "latency_p95_ms": 19976.01,
+          "human_reviewed": 0,
+          "human_review_coverage": 0.0,
+          "answer_accuracy": null,
+          "citation_support_rate": null
+        },
+        "conversation": {
+          "total": 30,
+          "errors": 0,
+          "contract_passed": 29,
+          "contract_pass_rate": 0.9667,
+          "cited_expected_source_coverage": 0.96,
+          "citation_validity_rate": 1,
+          "abstention_expected": 5,
+          "abstention_rate": 1,
+          "latency_mean_ms": 11293.1417,
+          "latency_p95_ms": 28683.72,
+          "human_reviewed": 0,
+          "human_review_coverage": 0.0,
+          "answer_accuracy": null,
+          "citation_support_rate": null
+        }
+      },
+      "retrieval": {
+        "vector": {
+          "candidate_metrics": {
+            "total": 30,
+            "k": 20,
+            "errors": 0,
+            "recall_at_k": 1.0,
+            "hit_at_k": 1,
+            "mrr_at_k": 0.8733,
+            "no_answer_false_positive_rate": 1,
+            "latency_mean_ms": 2884.705,
+            "latency_p95_ms": 3097.32
+          },
+          "final_metrics": {
+            "total": 30,
+            "k": 4,
+            "errors": 0,
+            "recall_at_k": 0.96,
+            "hit_at_k": 0.96,
+            "mrr_at_k": 0.8667,
+            "no_answer_false_positive_rate": 1,
+            "latency_mean_ms": 2884.705,
+            "latency_p95_ms": 3097.32
+          },
+          "rerank_applied": 0,
+          "rerank_fallbacks": 0
+        },
+        "hybrid": {
+          "candidate_metrics": {
+            "total": 30,
+            "k": 20,
+            "errors": 0,
+            "recall_at_k": 1.0,
+            "hit_at_k": 1,
+            "mrr_at_k": 0.908,
+            "no_answer_false_positive_rate": 1,
+            "latency_mean_ms": 2858.7417,
+            "latency_p95_ms": 3054.4
+          },
+          "final_metrics": {
+            "total": 30,
+            "k": 4,
+            "errors": 0,
+            "recall_at_k": 0.96,
+            "hit_at_k": 0.96,
+            "mrr_at_k": 0.9,
+            "no_answer_false_positive_rate": 1,
+            "latency_mean_ms": 2858.7417,
+            "latency_p95_ms": 3054.4
+          },
+          "rerank_applied": 0,
+          "rerank_fallbacks": 0
+        },
+        "hybrid_rerank": {
+          "candidate_metrics": {
+            "total": 30,
+            "k": 20,
+            "errors": 0,
+            "recall_at_k": 1.0,
+            "hit_at_k": 1,
+            "mrr_at_k": 0.908,
+            "no_answer_false_positive_rate": 1,
+            "latency_mean_ms": 3509.26,
+            "latency_p95_ms": 3928.45
+          },
+          "final_metrics": {
+            "total": 30,
+            "k": 4,
+            "errors": 0,
+            "recall_at_k": 1.0,
+            "hit_at_k": 1,
+            "mrr_at_k": 0.98,
+            "no_answer_false_positive_rate": 1,
+            "latency_mean_ms": 3509.26,
+            "latency_p95_ms": 3928.45
+          },
+          "rerank_applied": 30,
+          "rerank_fallbacks": 0
+        }
+      },
+      "failed_cases": [
+        {
+          "id": "v20:conversation",
+          "question": "华科图书还没过期，但被另一位读者预约了，我还能续借吗？只问规定。",
+          "error": null,
+          "expected_source_coverage": 0.0,
+          "evidence_quote_coverage": 0.0,
+          "abstained": true,
+          "retrieval_status": "insufficient_evidence"
+        }
+      ]
+    }
+  },
+  "source_hashes": {
+    "entry-rules": "e34bd32fa037362773af96843831030b9964b5d654727edbd981e0afb5da56fd",
+    "campus-card": "d1ededc2dca9cf76fc4320f47e86f9b8b5935b27e2e448ad1dd2977d17f302c1",
+    "loan-permissions": "77466159c63e569e255236a6a9cb720ceda3582d1257aea37cf72cb5365c1d51",
+    "borrowing-service": "75ecbf478b77b9502a829f213ae0c177173e3ab99e7ee06947abbc0db14f8d18",
+    "book-reservations": "d67bf5b2e70ba79112e2ee891af9e2d92b8e059dfeb89e6ab6af89dae82366d7",
+    "renewals": "7bf0d49257f0d939d0aa7319b4c02b53dbbf625a8b425956e680423b88cbb9f4",
+    "seat-network-rules": "5d9d6ecc22595b7f68bf6564544078de7b821ae80725185c755cf6309e04c2cc",
+    "seat-management": "28c72c4f2d3916d52bdbc6042de9378bfd7d94b78b1a8b226e12d3d37adae905"
+  },
+  "index_audit": {
+    "documents": 8,
+    "sql_chunks": 46,
+    "vector_chunks": 46,
+    "all_consistent": true
+  },
+  "regression": {
+    "backend": {
+      "passed": 446,
+      "skipped": 0
+    },
+    "agent_harness": {
+      "total": 112,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": true
+    },
+    "frontend": {
+      "passed": 51,
+      "skipped": 0,
+      "build_passed": true,
+      "changed_file_format_passed": true
+    }
+  },
+  "browser": {
+    "ok": true,
+    "turns": 4,
+    "inputs": 1,
+    "source_preview_nonempty": true,
+    "screenshots": 7,
+    "js_errors": 0
+  },
+  "idempotence": {
+    "repeat_import_identical": true,
+    "documents": 8,
+    "versions": 8,
+    "chunks": 46
+  },
+  "cleanup": {
+    "synthetic": true,
+    "disabled_accounts": 2,
+    "history_preserved": true,
+    "official_corpus_preserved": true,
+    "submitted_loans": 0,
+    "submitted_reservations": 0,
+    "conversations": 94,
+    "workflows": 102
+  }
+}
