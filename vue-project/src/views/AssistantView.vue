@@ -20,7 +20,7 @@ const sourceError = ref('')
 const suggestions = computed(() =>
   mode.value === 'knowledge'
     ? ['学习空间的预约规则是什么？', '馆内可以携带食物吗？', '预约后应该如何取消？']
-    : ['如何在系统中提交预约？', '如何挑选适合小组讨论的空间？', '怎样查看我的预约状态？']
+    : ['今天是几月几日星期几？', '周六有自习室吗？', '明天14:00到16:00有哪些自习室？']
 )
 
 function currentTime() {
@@ -33,7 +33,7 @@ function welcomeMessage() {
     text:
       mode.value === 'knowledge'
         ? '你好，知识库模式只根据管理员已发布的馆规与说明回答，并附上来源。没有依据时会明确说明。实时空闲和个人预约请前往业务页面查询。'
-        : '你好，我是阅见 AI 空间助手，可以介绍系统流程并提供一般建议。馆规问题请切换“知识库问答”；实时空间、设施和预约状态请以系统页面为准。',
+        : '你好，我可以按北京时间理解日期，查询空间、设施和指定时段的预约条件。告诉我日期及起止时间即可查询，人数可选；“周六”等含糊日期会先向你确认。提交预约请使用“空间预约助手”，馆规请切换“知识库问答”。',
     time: currentTime(),
     localOnly: true
   }
@@ -49,7 +49,7 @@ const currentStatus = computed(() =>
     : thinking.value
       ? mode.value === 'knowledge'
         ? '正在检索知识库并生成回答'
-        : '正在生成回答'
+        : '正在查询或生成回答'
       : retrievalLabel(lastResult.value?.retrievalStatus) || '等待发送问题'
 )
 
@@ -203,9 +203,7 @@ async function openSource(source) {
             <span class="message-avatar"
               ><el-icon><MagicStick /></el-icon
             ></span>
-            <div class="thinking-bubble">
-              <i></i><i></i><i></i><span>DeepSeek 正在生成回答</span>
-            </div>
+            <div class="thinking-bubble"><i></i><i></i><i></i><span>正在处理你的问题</span></div>
           </div>
           <div v-if="errorMessage" class="chat-error" role="alert">
             <el-icon><InfoFilled /></el-icon>{{ errorMessage }}
@@ -235,7 +233,7 @@ async function openSource(source) {
             :placeholder="
               mode === 'knowledge'
                 ? '询问已发布的馆规或预约说明…'
-                : '询问系统流程或描述你的空间需求…'
+                : '例如：明天14:00到16:00有自习室吗？'
             "
             @keydown.enter.exact.prevent="send()"
           />
@@ -269,7 +267,7 @@ async function openSource(source) {
             {{
               mode === 'knowledge'
                 ? '检索已发布文档 → 校验有效版本 → DeepSeek 根据资料回答'
-                : '普通聊天不检索知识库'
+                : '可查询日期和空间信息；馆规请使用知识库问答'
             }}
           </p>
           <p v-if="lastResult?.sources?.length">
@@ -298,7 +296,7 @@ async function openSource(source) {
             <el-icon><Check /></el-icon><span>在本轮对话中保留上下文</span>
           </li>
           <li>
-            <el-icon><Check /></el-icon><span>根据用户提供的信息给出建议</span>
+            <el-icon><Check /></el-icon><span>按北京时间理解日期并查询空间</span>
           </li>
           <li>
             <el-icon><Collection /></el-icon><span>知识模式检索馆规并提供来源</span>
@@ -315,7 +313,9 @@ async function openSource(source) {
         ></span>
         <div>
           <strong>数据边界</strong>
-          <p>知识库仅收录公开馆规和说明，不读取实时空闲或个人预约，也不会替你操作预约。</p>
+          <p>
+            普通聊天可查询空间与指定时段的预约条件；正式开放日历尚未配置。知识库提供已发布馆规，提交预约仍需选择空间并确认。
+          </p>
         </div>
       </section>
     </aside>
