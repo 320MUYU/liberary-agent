@@ -267,6 +267,17 @@ onMounted(refresh)
         <p v-if="busy && displayTurns.length" class="processing" role="status">正在处理，请稍候…</p>
       </div>
       <footer class="composer">
+        <el-select
+          v-if="history.length"
+          class="mobile-history"
+          :model-value="conversationId"
+          :disabled="busy"
+          placeholder="最近对话"
+          aria-label="手机最近对话"
+          @change="openConversation"
+        >
+          <el-option v-for="item in history" :key="item.id" :label="item.title" :value="item.id" />
+        </el-select>
         <div class="capabilities" aria-label="本轮能力偏好">
           <button
             v-for="item in capabilities"
@@ -365,6 +376,16 @@ onMounted(refresh)
 </template>
 
 <style scoped>
+.mobile-history {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .mobile-history {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+  }
+}
 .assistant-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;

@@ -181,8 +181,11 @@ def send(db, user_id, conversation_id, message):
                     save_draft(db, run, decision.draft)
                     reply = "已补充预约条件，请在原任务卡片中核对并确认查询条件。"
                 else:
-                    workflow.operate(db, user_id, task_id, "clarify", {"text": decision.message})
-                    workflow.operate(db, user_id, task_id, "retry")
+                    if request_id not in run.request.get("conversation_supplements", []):
+                        workflow.operate(db, user_id, task_id, "clarify", {
+                            "text": decision.message, "message_id": request_id})
+                    if workflow.owned(db, user_id, task_id).status in {"planning", "ready"}:
+                        workflow.operate(db, user_id, task_id, "retry")
                     reply = "已补充原任务的需求，请查看更新后的任务卡片。"
             turn.reply = {"content": reply}
             turn.status = "completed"; db.commit()

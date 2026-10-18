@@ -66,3 +66,30 @@ class ConversationRuntimeTest(unittest.TestCase):
             with self.assertRaises(BusinessException):
                 self.send(cid)
         self.assertEqual(self.db.query(ConversationTurn).one().status, "failed")
+
+    def test_lost_supplement_response_does_not_append_the_same_text_twice(self):
+        from app.agent import workflow
+        from app.schemas.workflow import WorkflowPlan
+        cid = self.create(); task_id = str(uuid4())
+        workflow.create_workflow(self.db, self.reader.id, task_id, "帮我安排",
+            plan=WorkflowPlan(steps=[], clarification="请说明需求"))
+        self.db.add(ConversationTurn(conversation_id=cid, request_id=str(uuid4()),
+            request={"text": "帮我安排"}, status="completed", workflow_id=task_id,
+            reply={"content": "请说明需求"}))
+        self.db.commit()
+        rid = uuid4()
+        decision = ConversationDecision(action="supplement", workflow_id=task_id, message="找Python书")
+        original = workflow.operate
+        def lost(db, user_id, task_id, operation="view", payload=None):
+            if operation == "retry":
+                raise BusinessException("响应丢失", 503)
+            return original(db, user_id, task_id, operation, payload)
+        with patch("app.agent.conversation.route_conversation", return_value=decision):
+            with patch("app.agent.conversation.workflow.operate", side_effect=lost):
+                with self.assertRaises(BusinessException):
+                    self.send(cid, "找Python书", rid)
+            with patch("app.agent.workflow.plan_workflow", return_value=WorkflowPlan(steps=[
+                    {"task_type": "borrow", "title": "找书", "query": "Python", "read_only": True}])):
+                result = self.send(cid, "找Python书", rid)
+        self.assertEqual(result["turns"][-1]["status"], "completed")
+        self.assertEqual(result["tasks"][0]["query"].count("补充："), 1)

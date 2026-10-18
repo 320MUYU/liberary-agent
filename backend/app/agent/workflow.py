@@ -90,8 +90,13 @@ def parent_status(run, steps):
         run.message = "所有步骤已结束，请查看每项结果；申请仍以管理员审核为准。"
     elif any(step.status == "failed" for step in steps):
         run.status = "partial_failure" if any(step.status == "completed" for step in steps) else "retryable"
-    elif run.status not in {"needs_conditions", "budget_exceeded"}:
-        run.status = "waiting" if any(step.status == "waiting" for step in steps) else "ready"
+    elif run.status != "budget_exceeded":
+        current = next(step for step in steps if step.status not in DONE)
+        if current.spec["task_type"] == "reservation" and not run.conditions:
+            run.status = "needs_conditions"
+            run.message = "请核对并确认预约日期、时段、人数和用途。"
+        else:
+            run.status = "waiting" if any(step.status == "waiting" for step in steps) else "ready"
 
 
 def view(db, run):
@@ -148,6 +153,9 @@ def operate(db, user_id, workflow_id, operation="view", payload=None):
                 raise BusinessException("合计描述不能超过1000字，请新建任务", 422)
             run.query = query; run.status = "planning"; run.message = None
             run.request = {k: v for k, v in run.request.items() if k != "plan"}
+            if payload.get("message_id"):
+                run.request = {**run.request, "conversation_supplements": [
+                    *run.request.get("conversation_supplements", []), payload["message_id"]]}
             db.commit()
         elif operation == "conditions":
             if run.status in {"cancelled", "completed"} or not any(s.spec["task_type"] == "reservation" for s in steps):

@@ -37,6 +37,7 @@ def main(argv=None):
     modules.extend(["tests.test_book_discovery", "tests.test_space_discovery",
         "tests.test_space_schema_upgrade.SpaceSchemaUpgradePlanTest"])
     modules.extend("tests.test_workflow_" + name for name in ("models", "specialists", "runtime", "api", "coordinator"))
+    modules.extend("tests.test_conversation_" + name for name in ("models", "specialists", "runtime", "api", "coordinator"))
     output = io.StringIO()
     started = time.monotonic()
     result = unittest.TextTestRunner(stream=output, verbosity=2).run(
@@ -58,7 +59,9 @@ def main(argv=None):
             "reservation rollback and replay", "reservation capability isolation", "legacy schema preview",
             "structured multi-agent plans", "independent specialist checkpoints", "parent child ownership",
             "immutable workflow conditions", "durable aggregate budgets", "cross-business partial recovery",
-            "skipped step recovery", "read-only workflow isolation"]}
+            "skipped step recovery", "read-only workflow isolation",
+            "unified conversation continuity", "contextual capability routing", "natural condition drafts",
+            "conversation message replay", "knowledge evidence propagation", "supplement replay"]}
     encoded = json.dumps(report, ensure_ascii=False, indent=2)
     if args.output:
         args.output.write_text(encoded + "\n", encoding="utf-8")

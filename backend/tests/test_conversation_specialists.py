@@ -67,3 +67,13 @@ class ConversationWorkflowTest(unittest.TestCase):
         run = self.operate(run)
         self.assertEqual(run["status"], "needs_conditions")
         self.assertIsNone(run["steps"][1]["result"])
+
+    def test_skipping_missing_reservation_conditions_unblocks_the_next_step(self):
+        run = self.setup_workflow([
+            {"task_type": "reservation", "query": "预约", "title": "预约", "read_only": False},
+            {"task_type": "chat", "query": "你好", "title": "问候", "read_only": True}])
+        run = self.operate(run, "skip", {"step_id": run["steps"][0]["id"]})
+        self.assertEqual(run["status"], "ready")
+        with patch("app.agent.specialists.ai_services.chat", return_value=ChatResponse(content="你好")):
+            run = self.operate(run)
+        self.assertEqual(run["status"], "completed")
