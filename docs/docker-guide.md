@@ -75,6 +75,36 @@ API 的健康检查验证 HTTP 和数据库；MySQL 验证认证查询；Chroma 
 
 `down -v` 会删除数据卷，不用于停止服务。首次迁移快照不是持续备份：后续 Docker 新增数据应另行备份 MySQL 及四个卷，并保留配套私有配置，确认恢复可用后再做破坏性操作。
 
+## 密码更新后的登录失效（2026-10-18）
+
+用户修改密码或管理员重置密码时，密码与 `users.token_version` 在同一事务中更新，旧 Token 在后续鉴权请求中返回 HTTP 401。前端收到 401 后清除登录状态并跳转登录页；用户需使用新密码重新登录。其他账号不受影响，失败的密码更新不撤销登录。已通过鉴权并正在执行的请求不会被追溯取消。
+
+升级前签发的 Token 没有版本字段，按版本 0 兼容；账号首次更新密码后，这些旧 Token 同样失效。版本必须为非负整数，不能以字符串、布尔值或空值代替。MySQL 行锁串行化同一账号的密码更新，防止并发重置丢失版本递增，也防止两个已鉴权请求同时使用旧密码改密。
+
+已有数据库需要执行一次增量升级，`create_all` 不会给旧表补列。**本机 Docker 库已完成本次升级，日常启动不必重做。** 其他旧部署可按下面顺序操作；备份含账号及业务数据，应保存在已忽略的私有目录中。以下命令在仓库根目录的 PowerShell 执行：
+
+```powershell
+./infra/docker/compose.ps1 build api
+./infra/docker/compose.ps1 stop web api worker mcp
+
+$tokenBackup = "backend/data/token-version-upgrade/$(Get-Date -Format yyyyMMdd-HHmmss)"
+New-Item -ItemType Directory -Path $tokenBackup
+docker exec lab-agent-local-mysql-1 sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysqldump -u "$MYSQL_USER" --single-transaction --no-tablespaces --hex-blob --default-character-set=utf8mb4 "$MYSQL_DATABASE" > /tmp/user-token-before.sql'
+if ($LASTEXITCODE -ne 0) { throw '数据库备份失败，停止升级' }
+docker cp lab-agent-local-mysql-1:/tmp/user-token-before.sql "$tokenBackup/database.sql"
+if ($LASTEXITCODE -ne 0) { throw '备份复制失败，停止升级' }
+Get-FileHash "$tokenBackup/database.sql" -Algorithm SHA256
+
+./infra/docker/compose.ps1 run --rm --no-deps -T api python scripts/upgrade_user_token_version.py
+./infra/docker/compose.ps1 run --rm --no-deps -T api python scripts/upgrade_user_token_version.py --apply
+./infra/docker/compose.ps1 run --rm --no-deps -T api python scripts/upgrade_user_token_version.py
+./infra/docker/compose.ps1 up -d --wait --wait-timeout 180
+```
+
+先预览，应只列出新增非空整数列、默认值为 0 的语句；应用后再次预览应为 `statements: []`。遇到错误先停止后续命令并检查日志。升级不重置密码、不删除记录，也不会把已有非零版本改回 0。原开发数据库与 Docker 库相互独立；如需使用新的源码启动原开发后端，须先备份原库，再在 `backend` 中运行 `.venv/Scripts/python.exe scripts/upgrade_user_token_version.py` 预览及加 `--apply` 执行。
+
+本次验收：Docker 镜像内后端 491 项测试全部通过，无跳过，覆盖独立 MySQL 并发改密、并发重置、旧表升级、旧 Token 兼容、新密码登录、同秒连续改密、异常回滚及账号隔离。升级前后 24 张业务表、1,046 条记录的既有列内容哈希全部一致，原账号密码保持不变；迁移后所有账号版本均为 0。数据库备份、旧容器源码、逐表摘要和测试日志保存在本机 `backend/data/token-version-upgrade/`，不提交到 Git。更新后的登录页面和健康检查返回 200，未登录访问返回 HTTP 401，不存在账号的登录返回业务码 401；六个服务已恢复运行。
+
 ## 返回原本机环境
 
 原 MySQL、`backend/.env`、`backend/data` 与 `backend/uploads` 都保留。迁移后原 API、MCP、worker、Chroma 保持暂停，避免用户误用两个独立数据源。需要返回迁移前环境时，先停止 Docker 部署，再按原 README 在各自终端启动：
