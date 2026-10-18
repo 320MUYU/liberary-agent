@@ -80,6 +80,12 @@ const html = computed(() => renderAiMarkdown(props.content))
   padding-left: 24px;
   margin: 10px 0 16px;
 }
+.ai-markdown :deep(ul) {
+  list-style-type: disc;
+}
+.ai-markdown :deep(ol) {
+  list-style-type: decimal;
+}
 .ai-markdown :deep(li) {
   padding-left: 3px;
   margin: 5px 0;
