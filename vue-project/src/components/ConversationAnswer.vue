@@ -47,7 +47,7 @@ async function preview(item) {
       <p v-else-if="error" role="alert">{{ error }}</p>
       <template v-else-if="source">
         <strong>{{ source.title }} · v{{ source.version }}</strong>
-        <pre>{{ source.content }}</pre>
+        <pre>{{ source.text }}</pre>
       </template>
     </el-dialog>
   </div>
