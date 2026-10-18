@@ -15,6 +15,7 @@ from app.models.workflow import WorkflowRun, WorkflowStep
 from app.models.book_copies import BookCopy
 from app.models.books import Book
 from app.models.book_sources import BookSource
+from app.models.library_corpus import LibraryCorpusSource
 from app.models.equipments import Equipment
 from app.models.labs import Lab
 from app.models.loans import Loan
@@ -37,6 +38,7 @@ __all__ = [
     "AgentReservationAction",
     "Book",
     "BookSource",
+    "LibraryCorpusSource",
     "BookCopy",
     "Equipment",
     "Lab",
