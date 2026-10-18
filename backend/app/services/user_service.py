@@ -46,12 +46,29 @@ def update_password(db: Session, user: User, data: PasswordUpdateRequest) -> Non
     "两次输入不一致""新旧密码相同"已在 PasswordUpdateRequest 里拦掉了（走 422），
     这里只剩必须查库才能判断的"原密码是否正确"。
     """
-    if not verify_password(data.old_password, user.password):
-        raise BusinessException(message="原密码错误")
+    # 保存鉴权时的版本；锁定读可能刷新同一个 ORM 对象。
+    expected_version = user.token_version
+    try:
+        user = _lock_password_user(db, user.id)
+        if user.token_version != expected_version:
+            raise BusinessException("登录已失效，请重新登录", 401)
+        if not verify_password(data.old_password, user.password):
+            raise BusinessException(message="原密码错误")
 
-    # 存进库的依然是 bcrypt 密文，明文密码不落库、也不写日志
-    user.password = hash_password(data.new_password)
-    db.commit()
+        # 密码与版本在同一事务更新；行锁避免并发改密或重置丢失递增。
+        user.password = hash_password(data.new_password)
+        user.token_version += 1
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+
+def _lock_password_user(db: Session, user_id: int) -> User:
+    user = db.query(User).filter(User.id == user_id).populate_existing().with_for_update().first()
+    if user is None:
+        raise BusinessException("用户不存在", 404)
+    return user
 
 
 def get_user_or_404(db: Session, user_id: int) -> User:
@@ -149,6 +166,11 @@ def reset_user_password(db: Session, user_id: int, new_password: str) -> None:
     存进库的依然是 bcrypt 密文；重置出来的密码要不要告诉用户，
     由管理员线下传达，接口不回显。
     """
-    user = get_user_or_404(db, user_id)
-    user.password = hash_password(new_password)
-    db.commit()
+    try:
+        user = _lock_password_user(db, user_id)
+        user.password = hash_password(new_password)
+        user.token_version += 1
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise

@@ -17,7 +17,7 @@ from app.utils.jwt import create_access_token
 def login(db: Session, username: str, password: str) -> tuple[User, str]:
     """校验账号密码与账号状态，通过后返回 (用户, token)"""
     # 根据用户账号查询数据库
-    user = db.query(User).filter(User.username == username).first()
+    user = db.query(User).filter(User.username == username).populate_existing().first()
 
     # 判断账号和密码是否正确
     # 注意这里不分"账号不存在"和"密码错误"两种情况分别提示：
@@ -30,7 +30,7 @@ def login(db: Session, username: str, password: str) -> tuple[User, str]:
     if user.status != 1:
         raise BusinessException(code=403, message="账号被禁用")
 
-    return user, create_access_token(user.id)
+    return user, create_access_token(user.id, user.token_version)
 
 
 def register(db: Session, data: RegisterRequest) -> User:

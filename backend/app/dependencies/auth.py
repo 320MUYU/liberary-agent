@@ -23,8 +23,14 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的登录凭证"
         )
+    # 升级前签发的 Token 没有版本字段，仅兼容尚未改密的版本 0。
+    token_version = payload.get("token_version", 0)
+    if type(token_version) is not int or token_version < 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的登录凭证"
+        )
     # 从数据库根据用户ID查询用户信息
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == user_id).populate_existing().first()
     # 新增判断：防止用户为空，访问user.status时报错
     if not user:
         raise HTTPException(
@@ -33,6 +39,10 @@ def get_current_user(
     if user.status != 1:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="用户被禁用"
+        )
+    if token_version != user.token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="登录已失效，请重新登录"
         )
     return user
 
