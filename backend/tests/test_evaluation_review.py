@@ -1,7 +1,11 @@
 """Review workbench behavior, independent of model/network calls."""
 
 import copy
+import os
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from uuid import uuid4
 
 from types import SimpleNamespace
 from sqlalchemy import create_engine, inspect, select, text
@@ -13,6 +17,7 @@ from app.models.evaluation_review import EvaluationRun, EvaluationCaseReview
 from app.schemas.evaluation_review import ReviewDecision
 from app.services import evaluation_review_service as service
 from scripts.upgrade_evaluation_reviews import upgrade
+from tests import test_loan_mysql as mysql_fixtures
 
 from app.services.evaluation_reports import (
     apply_reviews, report_identity, summarize, validate_report,
@@ -198,3 +203,54 @@ class ReviewStorageTest(unittest.TestCase):
         service.save_review(self.db, run_id, "c0:knowledge", self.decision(revision=1, notes="重审"), self.admin)
         self.assertEqual(service.export_reviews(self.db, run_id)["cases"], [])
         self.assertIsNone(service.get_run(self.db, run_id)["metrics"]["answer_accuracy"])
+
+
+@unittest.skipUnless(os.environ.get("RUN_LIBRARY_MYSQL_TEST") == "1" or os.environ.get("MYSQL_LIBRARY_TEST_URL"),
+                     "需显式启用独立MySQL审核并发测试")
+class ReviewMySQLTest(unittest.TestCase):
+    setUpClass = classmethod(mysql_fixtures.LoanMySQLConcurrencyTest.setUpClass.__func__)
+    dispose_test_database = classmethod(mysql_fixtures.LoanMySQLConcurrencyTest.dispose_test_database.__func__)
+    setUp = mysql_fixtures.LoanMySQLConcurrencyTest.setUp
+    user = mysql_fixtures.LoanMySQLConcurrencyTest.user
+
+    def report(self):
+        report = sample_report()
+        report["test_identity"] = uuid4().hex
+        report["report_id"] = report_identity(report)
+        return report
+
+    def test_overlapping_imports_have_one_run_and_preserve_pending_nulls(self):
+        report = self.report()
+        barrier = Barrier(2)
+        actor = SimpleNamespace(id=self.admin_id)
+        def import_once():
+            with Session(self.engine) as db:
+                barrier.wait(timeout=10)
+                return service.import_report(db, report, "并发导入", actor)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outputs = list(pool.map(lambda _: import_once(), range(2)))
+        self.assertEqual(outputs[0]["id"], outputs[1]["id"])
+        with Session(self.engine) as db:
+            rows = db.scalars(select(EvaluationCaseReview).where(
+                EvaluationCaseReview.run_id == outputs[0]["id"])).all()
+            self.assertEqual(len(rows), 2)
+            self.assertTrue(all(row.answer_correct is None and row.citations_support is None for row in rows))
+
+    def test_two_editors_cannot_both_save_the_same_revision(self):
+        actor = SimpleNamespace(id=self.admin_id, name="审核员", username="concurrency-admin")
+        run = service.import_report(self.db, self.report(), "并发保存", actor)
+        barrier = Barrier(2)
+        def save_once(note):
+            with Session(self.engine) as db:
+                barrier.wait(timeout=10)
+                try:
+                    return service.save_review(db, run["id"], "c0:knowledge", ReviewDecision(
+                        revision=0, status="reviewed", answer_correct=True, citations_support=True, notes=note), actor)
+                except BusinessException as exc:
+                    return exc.code
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outputs = list(pool.map(save_once, ["first", "second"]))
+        self.assertEqual(sum(isinstance(row, dict) for row in outputs), 1)
+        self.assertIn(409, outputs)
+        with Session(self.engine) as db:
+            self.assertEqual(service.get_case(db, run["id"], "c0:knowledge")["review"]["revision"], 1)
