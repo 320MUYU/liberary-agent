@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import math
+import re
 import statistics
 
 
@@ -19,10 +20,10 @@ def validate_report(report):
         if not isinstance(row, dict):
             raise ValueError("回答条目必须是对象")
         case_id = row.get("id")
-        if (not isinstance(case_id, str) or not case_id.strip() or len(case_id) > 200
-                or case_id in seen):
-            raise ValueError("回答编号必须非空且唯一，最多200字")
-        seen.add(case_id)
+        if (not isinstance(case_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}", case_id)
+                or case_id.casefold() in seen):
+            raise ValueError("题号须以字母或数字开头，可含 . _ : -，最多200字且忽略大小写后唯一")
+        seen.add(case_id.casefold())
         if (not isinstance(row.get("question"), str) or not row["question"].strip()
                 or type(row.get("answerable")) is not bool
                 or type(row.get("contract_pass")) is not bool
@@ -30,6 +31,7 @@ def validate_report(report):
                 or type(row.get("abstained")) is not bool
                 or not isinstance(row.get("answer"), dict)
                 or not isinstance(row["answer"].get("content", ""), str)
+                or "error" not in row or "expected_source_coverage" not in row
                 or row.get("error") is not None and not isinstance(row["error"], str)):
             raise ValueError("回答、问题和自动评测字段无效")
         for field in ("prelude", "expected_facts"):

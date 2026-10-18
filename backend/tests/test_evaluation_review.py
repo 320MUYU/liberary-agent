@@ -91,6 +91,20 @@ class ReportValidationTest(unittest.TestCase):
         self.assertEqual(result["metrics"]["citation_support_rate"], 1)
         self.assertEqual(result["review_status"], "pending_human")
 
+    def test_import_rejects_missing_statistics_fields_and_unaddressable_case_ids(self):
+        for field in ("error", "expected_source_coverage"):
+            report = sample_report()
+            del report["results"][0][field]
+            report["report_id"] = report_identity(report)
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate_report(report)
+        for case_id in ("a/b", "..", " c0", "c1:KNOWLEDGE"):
+            report = sample_report()
+            report["results"][0]["id"] = case_id
+            report["report_id"] = report_identity(report)
+            with self.subTest(case_id=case_id), self.assertRaises(ValueError):
+                validate_report(report)
+
     def test_legacy_review_rejects_duplicates_wrong_report_and_error_as_correct(self):
         report = sample_report()
         item = {"id": "c0:knowledge", "reviewer": "admin", "answer_correct": True,
