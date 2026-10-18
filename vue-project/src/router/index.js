@@ -87,6 +87,11 @@ const router = createRouter({
       component: () => import('@/views/admin/KnowledgeManageView.vue'),
       meta: { title: '知识库管理', requiresAuth: true, requiresAdmin: true }
     },
+    {
+      path: '/admin/evaluation-reviews',
+      component: () => import('@/views/admin/EvaluationReviewView.vue'),
+      meta: { title: 'AI 效果审核', requiresAuth: true, requiresAdmin: true }
+    },
     { path: '/:pathMatch(.*)*', redirect: '/' }
   ],
   scrollBehavior: () => ({ top: 0 })

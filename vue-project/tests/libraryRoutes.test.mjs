@@ -40,7 +40,13 @@ async function loadRouter(token, user) {
 
 test('library routes register reader and administrator pages with login guards', async () => {
   const router = await loadRouter('', null)
-  for (const path of ['/books', '/loans', '/admin/books', '/admin/loans']) {
+  for (const path of [
+    '/books',
+    '/loans',
+    '/admin/books',
+    '/admin/loans',
+    '/admin/evaluation-reviews'
+  ]) {
     const route = router.routes.find((item) => item.path === path)
     assert.ok(route, `Missing ${path}`)
     assert.equal(route.meta.requiresAuth, true)
@@ -54,7 +60,7 @@ test('library routes register reader and administrator pages with login guards',
 test('reader cannot open library admin pages and administrator can', async () => {
   const reader = await loadRouter('local-test-token', { role: 'student' })
   const admin = await loadRouter('local-test-token', { role: 'admin' })
-  for (const path of ['/admin/books', '/admin/loans']) {
+  for (const path of ['/admin/books', '/admin/loans', '/admin/evaluation-reviews']) {
     const route = reader.routes.find((item) => item.path === path)
     assert.ok(route, `Missing ${path}`)
     assert.equal(route.meta.requiresAdmin, true)

@@ -31,7 +31,8 @@ const adminNavigation = [
   { label: '空间管理', path: '/admin/labs', icon: 'Reading' },
   { label: '设施管理', path: '/admin/equipments', icon: 'SetUp' },
   { label: '预约审核', path: '/admin/reservations', icon: 'Calendar' },
-  { label: '知识库管理', path: '/admin/knowledge', icon: 'Document' }
+  { label: '知识库管理', path: '/admin/knowledge', icon: 'Document' },
+  { label: 'AI 效果审核', path: '/admin/evaluation-reviews', icon: 'Checked' }
 ]
 const isAdmin = computed(() => userInfo.value?.role === 'admin')
 
