@@ -112,7 +112,7 @@ def extract_conversation_answer(view, request_id):
     turn = next((row for row in view.get("turns", []) if row.get("request_id") == request_id), None)
     if turn is None:
         raise ValueError("requested_turn_missing")
-    if turn.get("reply"):
+    if turn.get("reply") and not turn.get("workflow_id"):
         return turn["reply"], {"task_types": [], "workflow_id": turn.get("workflow_id")}
     task = next((row for row in view.get("tasks", []) if row.get("workflow_id") == turn.get("workflow_id")), None)
     if task is None:

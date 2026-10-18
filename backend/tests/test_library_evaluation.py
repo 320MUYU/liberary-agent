@@ -155,6 +155,22 @@ class LibraryEvaluationTest(unittest.TestCase):
         record = make_record(case, self.answer, bound, self.previews, 10)
         self.assertTrue(record["contract_pass"])
 
+    def test_task_answer_takes_precedence_over_conversation_acknowledgment(self):
+        view = {"turns": [{"request_id": "new", "workflow_id": "task",
+            "reply": {"content": "已按你的需求安排处理步骤，结果与后续操作见下方。"}}],
+            "tasks": [{"workflow_id": "task", "status": "completed", "steps": [
+                {"spec": {"task_type": "knowledge"}, "result": self.answer}]}]}
+        answer, trace = extract_conversation_answer(view, "new")
+        self.assertEqual(answer, self.answer)
+        self.assertEqual(trace["task_types"], ["knowledge"])
+
+    def test_direct_clarification_without_task_remains_a_direct_reply(self):
+        reply = {"content": "请明确要查询哪个图书馆的规定。"}
+        answer, trace = extract_conversation_answer({"turns": [
+            {"request_id": "new", "workflow_id": None, "reply": reply}], "tasks": []}, "new")
+        self.assertEqual(answer, reply)
+        self.assertEqual(trace["task_types"], [])
+
     def test_conversation_runner_advances_only_current_ready_task_without_confirmation(self):
         seen = []
         request_id = None
