@@ -233,6 +233,22 @@ class RagChatTest(unittest.TestCase):
         self.assertEqual(response.retrieval_status, "no_match")
         self.assertIn("暂无足够依据", response.content)
 
+    def test_explicit_evidence_refusal_cannot_become_a_match_through_unrelated_citations(self):
+        _, _, chunk = self.add_source("一本编程书的目录信息。")
+        store = FakeStore([{"id": chunk.vector_id, "distance": 0.1}])
+        for answer in ("NO_EVIDENCE [1]", "资料不足。本轮没有本系统借阅规则 [1]。",
+                       "**依据不足**，不能核对 [1]。"):
+            with self.subTest(answer=answer):
+                response = self.ask(store, FakeModel(answer))
+                self.assertEqual(response.retrieval_status, "insufficient_evidence")
+                self.assertEqual(response.sources, [])
+
+    def test_supported_negative_rule_remains_a_cited_answer(self):
+        _, _, chunk = self.add_source("不得在安静区域接电话。")
+        response = self.ask(FakeStore([{"id": chunk.vector_id, "distance": 0.1}]),
+                            FakeModel("不能在安静区域接电话。[1]"))
+        self.assertEqual(response.retrieval_status, "matched")
+
     def test_vector_and_embedding_failures_remain_service_errors(self):
         self.add_source()
         for store, embeddings in [
