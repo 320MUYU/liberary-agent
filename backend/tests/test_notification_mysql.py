@@ -15,6 +15,7 @@ from app.models.users import User
 from app.schemas.loan import BorrowConfirmRequest
 from app.services import loan_service
 from app.services.notification_reminders import generate_reminders
+from scripts.upgrade_reader_notifications import upgrade
 
 
 @unittest.skipUnless(os.environ.get('MYSQL_LIBRARY_TEST_URL') or os.environ.get('RUN_LIBRARY_MYSQL_TEST') == '1',
@@ -56,3 +57,15 @@ class NotificationMySQLTest(unittest.TestCase):
             with Session(self.engine) as db:
                 loan_service.request_return(db, db.get(User, reader_id), loan_id)
             self.assertEqual(generate_reminders(worker), 0)
+
+    def test_upgrade_on_mysql_preserves_existing_accounts_and_is_repeatable(self):
+        # This fixture always creates a random disposable schema.
+        self.assertTrue(self.test_database.startswith('library_loan_test_'))
+        before = self.db.query(User.id, User.username, User.password, User.token_version).order_by(User.id).all()
+        self.db.commit()
+        Notification.__table__.drop(self.engine)
+        statements = upgrade(self.engine)
+        self.assertTrue(any('CREATE TABLE' in statement for statement in statements))
+        upgrade(self.engine, apply=True)
+        self.assertEqual(upgrade(self.engine, apply=True), [])
+        self.assertEqual(before, self.db.query(User.id, User.username, User.password, User.token_version).order_by(User.id).all())

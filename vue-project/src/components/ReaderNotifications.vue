@@ -73,6 +73,11 @@ async function open(item) {
 </template>
 
 <style scoped>
+.reader-inbox {
+  max-height: min(560px, calc(100dvh - 120px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .reader-bell {
   position: relative;
   display: grid;

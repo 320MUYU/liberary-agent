@@ -226,7 +226,7 @@ def confirm_return(db: Session, current_admin: User, loan_id: int) -> Loan:
         loan.returned_by = current_admin.id
         emit_notification(db, user_id=reader.id, event_key=f"loan:{loan.id}:returned",
             kind="loan_returned", title="已确认归还", resource_type="loan", resource_id=loan.id,
-            content=f"《{book.title}》已确认归还，感谢按时交还图书。")
+            content=f"《{book.title}》已确认归还，感谢交还图书。")
     db.refresh(loan)
     return loan
 
