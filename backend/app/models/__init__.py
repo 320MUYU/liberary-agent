@@ -28,8 +28,10 @@ from app.models.knowledge import (
 )
 from app.models.reservations import Reservation
 from app.models.users import User
+from app.models.notification import Notification
 
 __all__ = [
+    "Notification",
     "EvaluationRun",
     "EvaluationCaseReview",
     "Conversation",

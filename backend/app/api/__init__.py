@@ -13,8 +13,10 @@ from app.api.knowledge import router as knowledge_router
 from app.api.loan import router as loan_router
 from app.api.reservation import router as reservation_router
 from app.api.user import router as user_router
+from app.api.notification import router as notification_router
 
 api = APIRouter(prefix="/api")
+api.include_router(notification_router)
 api.include_router(evaluation_review_router)
 api.include_router(conversation_router)
 api.include_router(workflow_router)
