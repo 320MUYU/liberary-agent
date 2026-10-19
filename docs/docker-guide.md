@@ -105,6 +105,12 @@ Get-FileHash "$tokenBackup/database.sql" -Algorithm SHA256
 
 本次验收：Docker 镜像内后端 491 项测试全部通过，无跳过，覆盖独立 MySQL 并发改密、并发重置、旧表升级、旧 Token 兼容、新密码登录、同秒连续改密、异常回滚及账号隔离。升级前后 24 张业务表、1,046 条记录的既有列内容哈希全部一致，原账号密码保持不变；迁移后所有账号版本均为 0。数据库备份、旧容器源码、逐表摘要和测试日志保存在本机 `backend/data/token-version-upgrade/`，不提交到 Git。更新后的登录页面和健康检查返回 200，未登录访问返回 HTTP 401，不存在账号的登录返回业务码 401；六个服务已恢复运行。
 
+## 读者站内通知（2026-10-19）
+
+通知模块新增 `reader_notifications` 表和独立的 `notification-worker` 服务。worker 每分钟生成到期前 3 天及逾期的一次性提醒，与 RAG 索引 worker 独立；右上角读者铃铛显示真实未读数，消息及已读时间保存在 MySQL。范围、接口、升级顺序及测试记录见 [读者通知指南](reader-notifications-guide.md)。
+
+**本轮源码功能已实现，Docker 业务库迁移及部署尚未执行。** 当前 Docker Desktop 启动被 Windows 的遗留 socket 访问错误阻断，需要先恢复 Docker 引擎，再完成隔离回归、数据库备份、通知表迁移、重建启动及部署验收。旧业务数据卷没有被重置或删除。原有密码 Token 版本升级记录仍有效。
+
 ## 返回原本机环境
 
 原 MySQL、`backend/.env`、`backend/data` 与 `backend/uploads` 都保留。迁移后原 API、MCP、worker、Chroma 保持暂停，避免用户误用两个独立数据源。需要返回迁移前环境时，先停止 Docker 部署，再按原 README 在各自终端启动：
