@@ -1,7 +1,9 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { getToken } from '@/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { cancelLoanApi, getMyLoansApi, requestLoanReturnApi } from '@/loanApi.js'
+import { cancelLoanApi, getMyLoanApi, getMyLoansApi, requestLoanReturnApi } from '@/loanApi.js'
 import { formatLoanTime, loanActions, LOAN_STATUSES } from '@/utils/library.js'
 
 const items = ref([])
@@ -14,6 +16,31 @@ const busyKey = ref('')
 const detail = ref(null)
 const detailVisible = ref(false)
 let sequence = 0
+let detailSequence = 0
+const route = useRoute()
+
+async function openLinkedLoan() {
+  const current = ++detailSequence
+  detailVisible.value = false
+  detail.value = null
+  const raw = route.query.loan_id
+  if (raw === undefined) return
+  const id = Number(raw)
+  if (!/^\d+$/.test(String(raw)) || !Number.isSafeInteger(id) || id < 1) {
+    ElMessage.warning('借阅通知链接无效')
+    return
+  }
+  const token = getToken()
+  try {
+    const loan = await getMyLoanApi(id)
+    if (current !== detailSequence || getToken() !== token) return
+    showDetail(loan)
+  } catch {
+    /* 接口会提示记录不存在或访问失败。 */
+  }
+}
+
+watch(() => route.query.loan_id, openLinkedLoan)
 
 async function fetchLoans() {
   const current = ++sequence
@@ -78,7 +105,14 @@ async function act(item, action) {
   }
 }
 
-onMounted(fetchLoans)
+onMounted(() => {
+  fetchLoans()
+  openLinkedLoan()
+})
+onUnmounted(() => {
+  sequence++
+  detailSequence++
+})
 </script>
 
 <template>

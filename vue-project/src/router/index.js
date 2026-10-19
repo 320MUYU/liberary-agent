@@ -43,6 +43,11 @@ const router = createRouter({
       meta: { title: '我的预约', requiresAuth: true }
     },
     {
+      path: '/notifications',
+      component: () => import('@/views/NotificationsView.vue'),
+      meta: { title: '消息通知', requiresAuth: true }
+    },
+    {
       path: '/assistant',
       component: () => import('@/views/AssistantView.vue'),
       meta: { title: '阅见 AI', requiresAuth: true }

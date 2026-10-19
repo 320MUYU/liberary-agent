@@ -4,7 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getUserInfoApi } from '@/authApi'
 import { BRAND } from '@/config/brand'
-import { loadLabs, notifications } from '@/store/labStore'
+import { loadLabs } from '@/store/labStore'
+import ReaderNotifications from '@/components/ReaderNotifications.vue'
+import { useNotifications } from '@/store/notificationStore'
 import { useAuthStore } from '@/store/authStore'
 import { useAdminTasks } from '@/store/adminTaskStore'
 import { resolveAssetUrl } from '@/utils/url.js'
@@ -20,6 +22,7 @@ const navigation = [
   { label: '我的借阅', path: '/loans', icon: 'Tickets' },
   { label: '学习空间', path: '/spaces', icon: 'Reading' },
   { label: '我的预约', path: '/reservations', icon: 'Calendar' },
+  { label: '消息通知', path: '/notifications', icon: 'Bell' },
   { label: '阅见 AI', path: '/assistant', icon: 'ChatDotRound', badge: 'AI' }
 ]
 
@@ -46,9 +49,8 @@ const {
   start: startTasks,
   stop: stopTasks
 } = useAdminTasks()
-const notificationTotal = computed(() =>
-  isAdmin.value ? taskSummary.value?.total : notifications.length
-)
+const notificationTotal = computed(() => taskSummary.value?.total)
+const { start: startNotifications, stop: stopNotifications } = useNotifications()
 function badgeText(value) {
   return value > 99 ? '99+' : String(value)
 }
@@ -57,10 +59,15 @@ watch(
   () => {
     if (token.value && isAdmin.value) startTasks(userInfo.value.id)
     else stopTasks()
+    if (token.value && userInfo.value?.id && !isAdmin.value) startNotifications(userInfo.value.id)
+    else stopNotifications()
   },
   { immediate: true }
 )
-onUnmounted(stopTasks)
+onUnmounted(() => {
+  stopTasks()
+  stopNotifications()
+})
 
 const currentTitle = computed(() => route.meta.title || '工作台')
 const userName = computed(() => userInfo.value?.name || userInfo.value?.username || '用户')
@@ -194,6 +201,7 @@ onMounted(async () => {
         </div>
         <div class="topbar-actions">
           <el-popover
+            v-if="isAdmin"
             placement="bottom-end"
             :width="330"
             trigger="click"
@@ -202,7 +210,6 @@ onMounted(async () => {
             <template #reference
               ><button
                 class="icon-button"
-                :class="{ 'has-dot': !isAdmin && notifications.length > 0 }"
                 :aria-label="isAdmin ? `待办提醒，共 ${notificationTotal ?? '未知'} 项` : '通知'"
               >
                 <el-icon><Bell /></el-icon
@@ -246,23 +253,9 @@ onMounted(async () => {
                   {{ tasksLoading ? '正在更新…' : '刷新待办' }}
                 </button>
               </template>
-              <div
-                v-for="item in isAdmin ? [] : notifications"
-                :key="item.id"
-                class="notification-item"
-              >
-                <span :class="`notice-dot ${item.type}`"></span>
-                <div>
-                  <strong>{{ item.title }}</strong>
-                  <p>{{ item.content }}</p>
-                  <small>{{ item.time }}</small>
-                </div>
-              </div>
-              <div v-if="!isAdmin && !notifications.length" class="notification-empty">
-                暂无通知
-              </div>
             </div>
           </el-popover>
+          <ReaderNotifications v-else />
           <span class="top-divider"></span>
           <el-dropdown trigger="click" @command="handleProfileCommand">
             <button class="profile" type="button">

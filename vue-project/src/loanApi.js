@@ -8,6 +8,10 @@ export function getMyLoansApi(params = {}) {
   return request({ url: '/api/loans', method: 'get', params })
 }
 
+export function getMyLoanApi(id) {
+  return request({ url: `/api/loans/${id}`, method: 'get' })
+}
+
 export function cancelLoanApi(id) {
   return request({ url: `/api/loans/${id}/cancel`, method: 'post' })
 }

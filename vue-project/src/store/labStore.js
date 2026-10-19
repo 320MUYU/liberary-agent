@@ -1,6 +1,10 @@
 import { reactive } from 'vue'
 import { getLabListApi } from '../labApi.js'
-import { cancelReservationApi, createReservationApi, getMyReservationsApi } from '../reservationApi.js'
+import {
+  cancelReservationApi,
+  createReservationApi,
+  getMyReservationsApi
+} from '../reservationApi.js'
 import { getUserInfo } from '../auth.js'
 
 // 实验室数据现在来自后端（这里原来是写死的 6 条假数据）。
@@ -39,7 +43,7 @@ const LAB_CATEGORY_STYLE = {
   多媒体空间: { color: '#e9e4ef', accent: '#725d8c' },
   经典阅览室: { color: '#ece5d8', accent: '#795b31' },
   学术交流室: { color: '#e2ece8', accent: '#3f765d' },
-  无障碍空间: { color: '#e5ebf1', accent: '#456c8c' },
+  无障碍空间: { color: '#e5ebf1', accent: '#456c8c' }
 }
 
 const LAB_CATEGORY_ICON = {
@@ -48,7 +52,7 @@ const LAB_CATEGORY_ICON = {
   多媒体空间: 'VideoCamera',
   经典阅览室: 'Collection',
   学术交流室: 'Presentation',
-  无障碍空间: 'User',
+  无障碍空间: 'User'
 }
 
 // 新类别（管理员自己加的）取不到预设值时给一套中性配色，不至于渲染成空白
@@ -81,7 +85,6 @@ export function overallHealthyRate(list = labs) {
 }
 
 export const bookings = reactive([])
-export const notifications = reactive([])
 let bookingsPending = null
 let loadedUserId = null
 let pendingUserId = null
@@ -93,7 +96,6 @@ export function clearBookings() {
   pendingUserId = null
   loadedUserId = null
   bookings.splice(0)
-  notifications.splice(0)
 }
 
 if (typeof window !== 'undefined') {
@@ -114,7 +116,7 @@ function displayBooking(record) {
     note: record.note,
     status: record.status,
     reviewNote: record.review_note,
-    createdAt: record.created_at,
+    createdAt: record.created_at
   }
 }
 
@@ -138,15 +140,17 @@ export function loadBookings(force = false) {
   const request = getMyReservationsApi()
     .then((records) => {
       if (
-        getUserInfo()?.id === userId
-        && loadedUserId === userId
-        && requestVersion === bookingRequestVersion
+        getUserInfo()?.id === userId &&
+        loadedUserId === userId &&
+        requestVersion === bookingRequestVersion
       ) {
         bookings.splice(0, bookings.length, ...records.map(displayBooking))
       }
       return bookings
     })
-    .finally(() => { if (bookingsPending === request) bookingsPending = null })
+    .finally(() => {
+      if (bookingsPending === request) bookingsPending = null
+    })
   bookingsPending = request
   return bookingsPending
 }
@@ -154,8 +158,13 @@ export function loadBookings(force = false) {
 export async function addBooking(data) {
   const userId = getUserInfo()?.id
   const record = await createReservationApi({
-    lab_id: Number(data.labId), date: data.date, start: data.start, end: data.end,
-    people: data.people, purpose: data.purpose, note: data.note,
+    lab_id: Number(data.labId),
+    date: data.date,
+    start: data.start,
+    end: data.end,
+    people: data.people,
+    purpose: data.purpose,
+    note: data.note
   })
   const booking = displayBooking(record)
   if (getUserInfo()?.id !== userId) return booking
@@ -181,20 +190,24 @@ export async function cancelBooking(id) {
 }
 
 export const statusMap = {
-  approved: { label: '已通过', class: '' }, pending: { label: '审核中', class: 'pending' },
+  approved: { label: '已通过', class: '' },
+  pending: { label: '审核中', class: 'pending' },
   rejected: { label: '未通过', class: 'cancelled' },
-  completed: { label: '已完成', class: 'completed' }, cancelled: { label: '已取消', class: 'cancelled' },
+  completed: { label: '已完成', class: 'completed' },
+  cancelled: { label: '已取消', class: 'cancelled' }
 }
 
 export const labStatusMap = {
-  available: { label: '可预约', type: 'success' }, busy: { label: '使用中', type: 'warning' }, maintenance: { label: '维护中', type: 'info' },
+  available: { label: '可预约', type: 'success' },
+  busy: { label: '使用中', type: 'warning' },
+  maintenance: { label: '维护中', type: 'info' }
 }
 
 // 设备状态：取值与后端 EquipmentCreateRequest 的 Literal 一一对应
 export const equipmentStatusMap = {
   normal: { label: '正常', type: 'success' },
   repair: { label: '维修中', type: 'warning' },
-  scrapped: { label: '已报废', type: 'danger' },
+  scrapped: { label: '已报废', type: 'danger' }
 }
 
 // "算不算完好"只在这里定义一次，下面两个完好率函数都走它，
