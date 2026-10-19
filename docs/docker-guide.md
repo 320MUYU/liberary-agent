@@ -13,11 +13,12 @@ Docker Compose 项目名固定为 `lab-agent-local`，与其他项目隔离。
 | mysql | MySQL 8.0 | `mysql_data` |
 | chroma | Chroma 1.5.9 | `chroma_data` |
 | worker | 独立知识索引进程 | 与 API 共享 `app_data` |
+| notification-worker | 独立读者到期/逾期提醒进程 | 消息在 MySQL，健康心跳与 API 共享 `app_data` |
 | mcp | 带能力凭证的内部 MCP 服务 | 与 API 共享 `app_data` |
 
 实际卷名带 `lab-agent-local_` 前缀。数据库、Chroma、API 和 MCP 均不发布宿主机端口。Nginx 同源代理 `/api/`、`/uploads/`，并处理 Vue history 路由刷新；知识原文目录不公开。全部服务使用 `Asia/Shanghai` 时区。
 
-API 的健康检查验证 HTTP 和数据库；MySQL 验证认证查询；Chroma 验证 heartbeat；MCP 验证携带凭证的协议初始化和工具列表；Nginx 验证 `/healthz`。worker 为持续进程，其退出由重启策略恢复；不将进程存活宣称为索引任务处理成功。
+API 的健康检查验证 HTTP 和数据库；MySQL 验证认证查询；Chroma 验证 heartbeat；MCP 验证携带凭证的协议初始化和工具列表；Nginx 验证 `/healthz`。notification-worker 每分钟扫描一次，健康检查验证最近 180 秒内扫描成功及对应进程存在。知识索引 worker 为持续进程，其退出由重启策略恢复；不将进程存活宣称为索引任务处理成功。
 
 ## 首次迁移
 
@@ -61,7 +62,7 @@ API 的健康检查验证 HTTP 和数据库；MySQL 验证认证查询；Chroma 
 
 # 查看状态及最近日志
 ./infra/docker/compose.ps1 ps
-./infra/docker/compose.ps1 logs --tail 80 api worker mcp
+./infra/docker/compose.ps1 logs --tail 80 api worker mcp notification-worker
 
 # 停止并移除本项目容器、网络，保留全部数据卷
 ./infra/docker/compose.ps1 down
@@ -85,7 +86,7 @@ API 的健康检查验证 HTTP 和数据库；MySQL 验证认证查询；Chroma 
 
 ```powershell
 ./infra/docker/compose.ps1 build api
-./infra/docker/compose.ps1 stop web api worker mcp
+./infra/docker/compose.ps1 stop web api worker mcp notification-worker
 
 $tokenBackup = "backend/data/token-version-upgrade/$(Get-Date -Format yyyyMMdd-HHmmss)"
 New-Item -ItemType Directory -Path $tokenBackup
@@ -109,7 +110,11 @@ Get-FileHash "$tokenBackup/database.sql" -Algorithm SHA256
 
 通知模块新增 `reader_notifications` 表和独立的 `notification-worker` 服务。worker 每分钟生成到期前 3 天及逾期的一次性提醒，与 RAG 索引 worker 独立；右上角读者铃铛显示真实未读数，消息及已读时间保存在 MySQL。范围、接口、升级顺序及测试记录见 [读者通知指南](reader-notifications-guide.md)。
 
-**本轮源码功能已实现，Docker 业务库迁移及部署尚未执行。** 当前 Docker Desktop 启动被 Windows 的遗留 socket 访问错误阻断，需要先恢复 Docker 引擎，再完成隔离回归、数据库备份、通知表迁移、重建启动及部署验收。旧业务数据卷没有被重置或删除。原有密码 Token 版本升级记录仍有效。
+**本机 Docker 已完成升级与验收。** 容器内 512 项后端测试全部通过，无跳过；前端 88 项测试及生产构建通过，部署入口的桌面与手机浏览器 20 项检查通过。先备份 MySQL，再增量新增通知表；原有 24 张表、1,046 条记录的内容摘要在升级及专用验收结束后保持一致。现有账号、密码和业务数据保留。
+
+当前七个服务运行，notification-worker 健康检查通过。审批、借还、到期前 3 天及逾期通知均已验证；重启 API、Nginx 和提醒 worker 后，通知与已读状态保留，提醒没有重复。验收仅操作新建的专用账号、书目和空间，结束后已归还验收图书、取消待使用预约、停用验收账号并下架/维护验收资源。
+
+本机数据库备份、SHA256、逐表内容摘要和回退镜像记录位于 `backend/data/reader-notifications/20261019-142324/`。容器回归日志、验收记录及截图位于其上级目录；这些私有文件不提交到 Git。此前 Docker Desktop 的遗留 socket 错误在重启 Windows 后恢复。
 
 ## 返回原本机环境
 
@@ -123,6 +128,7 @@ cd backend
 .venv/Scripts/python.exe -m uvicorn app.mcp.library:app --host 127.0.0.1 --port 8002
 .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 .venv/Scripts/python.exe knowledge_worker.py
+.venv/Scripts/python.exe notification_worker.py
 ```
 
 原开发前端仍按 `npm run dev` 启动。Docker 启用后的新增业务不会自动同步回原 MySQL；上述返回方式恢复的是迁移时的数据状态，不包含后续 Docker 写入。
