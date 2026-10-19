@@ -24,6 +24,15 @@ def my_loans(
     return Response.success(data=LoanPageResponse(total=total, page=page, page_size=page_size, items=items))
 
 
+@router.get("/loans/{loan_id}")
+def my_loan(
+    loan_id: int = Path(gt=0),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return Response.success(data=loan_service.get_my_loan(db, current_user, loan_id))
+
+
 @router.post("/loans")
 def apply_loan(
     data: LoanRequest,

@@ -14,6 +14,7 @@ from app.models.books import Book
 from app.models.loans import Loan
 from app.models.users import User
 from app.schemas.loan import BorrowConfirmRequest, LoanRejectRequest, LoanRequest, LoanResponse
+from app.services.notification_service import emit_notification
 
 
 LOAN_STATUSES = {"pending", "borrowed", "return_pending", "returned", "rejected", "cancelled"}
@@ -172,6 +173,9 @@ def confirm_borrow(
         loan.due_at = now + timedelta(days=settings.BOOK_LOAN_DAYS)
         loan.borrowed_by = current_admin.id
         loan.reviewed_by = current_admin.id
+        emit_notification(db, user_id=reader.id, event_key=f"loan:{loan.id}:borrowed",
+            kind="loan_borrowed", title="已确认借出", resource_type="loan", resource_id=loan.id,
+            content=f"《{book.title}》已确认借出，请于 {loan.due_at:%Y-%m-%d %H:%M} 前归还。")
     db.refresh(loan)
     return loan
 
@@ -180,12 +184,15 @@ def reject_loan(
     db: Session, current_admin: User, loan_id: int, data: LoanRejectRequest
 ) -> Loan:
     with _write_transaction(db):
-        _, _, loan = _lock_loan(db, loan_id)
+        reader, book, loan = _lock_loan(db, loan_id)
         _require_status(loan, "pending")
         loan.status = "rejected"
         loan.open_book_id = None
         loan.reject_reason = data.reason
         loan.reviewed_by = current_admin.id
+        emit_notification(db, user_id=reader.id, event_key=f"loan:{loan.id}:rejected",
+            kind="loan_rejected", title="借阅申请已驳回", resource_type="loan", resource_id=loan.id,
+            content=f"《{book.title}》的借阅申请已驳回。原因：{data.reason}")
     db.refresh(loan)
     return loan
 
@@ -209,7 +216,7 @@ def request_return(db: Session, current_user: User, loan_id: int) -> Loan:
 
 def confirm_return(db: Session, current_admin: User, loan_id: int) -> Loan:
     with _write_transaction(db):
-        _, _, loan = _lock_loan(db, loan_id)
+        reader, book, loan = _lock_loan(db, loan_id)
         _require_status(loan, "return_pending")
         db.query(BookCopy).filter(BookCopy.id == loan.copy_id).with_for_update().first()
         loan.status = "returned"
@@ -217,6 +224,9 @@ def confirm_return(db: Session, current_admin: User, loan_id: int) -> Loan:
         loan.open_book_id = None
         loan.returned_at = datetime.now()
         loan.returned_by = current_admin.id
+        emit_notification(db, user_id=reader.id, event_key=f"loan:{loan.id}:returned",
+            kind="loan_returned", title="已确认归还", resource_type="loan", resource_id=loan.id,
+            content=f"《{book.title}》已确认归还，感谢按时交还图书。")
     db.refresh(loan)
     return loan
 

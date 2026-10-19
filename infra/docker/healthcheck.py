@@ -28,6 +28,14 @@ def check(service):
                         await session.initialize()
                         assert (await session.list_tools()).tools
         asyncio.run(probe())
+    elif service == "notifications":
+        import json
+        import os
+        from pathlib import Path
+        import time
+        heartbeat = json.loads(Path("/app/data/notifications/heartbeat.json").read_text())
+        assert 0 <= time.time() - heartbeat["success_at"] < 180, "Reminder scan heartbeat expired"
+        os.kill(heartbeat["pid"], 0)
     else:
         raise ValueError("Unknown healthcheck")
 

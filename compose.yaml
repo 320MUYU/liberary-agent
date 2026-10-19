@@ -91,6 +91,20 @@ services:
     depends_on:
       api: {condition: service_healthy}
 
+  notification-worker:
+    <<: *backend
+    command: ["python", "notification_worker.py"]
+    volumes:
+      - app_data:/app/data
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "/opt/deploy/healthcheck.py", "notifications"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   web:
     image: lab-agent-frontend:local
     build:

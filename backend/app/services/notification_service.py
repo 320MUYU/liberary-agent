@@ -11,7 +11,7 @@ from app.schemas.notification import NotificationPageResponse, NotificationRespo
 
 def emit_notification(db, *, user_id, event_key, kind, title, content, resource_type, resource_id):
     """Call while holding the corresponding business row lock; never commit here."""
-    existing = db.query(Notification).filter_by(user_id=user_id, event_key=event_key).first()
+    existing = db.query(Notification).filter_by(user_id=user_id, event_key=event_key).with_for_update().first()
     if existing is not None:
         return existing
     notice = Notification(user_id=user_id, event_key=event_key, kind=kind, title=title, content=content,

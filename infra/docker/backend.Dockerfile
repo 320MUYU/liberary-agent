@@ -8,6 +8,7 @@ COPY backend/scripts ./scripts
 COPY backend/tests ./tests
 COPY evals /evals
 COPY backend/knowledge_worker.py ./knowledge_worker.py
+COPY backend/notification_worker.py ./notification_worker.py
 COPY infra/docker /opt/deploy
 RUN mkdir -p /app/data/agent /app/data/knowledge /app/uploads
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

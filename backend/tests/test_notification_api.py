@@ -12,6 +12,8 @@ from app.database import Base, get_db
 from app.main import app
 from app.models.notification import Notification
 from app.models.users import User
+from app.models.books import Book
+from app.models.loans import Loan
 from app.utils.jwt import create_access_token
 
 
@@ -52,6 +54,22 @@ class NotificationApiTest(unittest.TestCase):
                 ("POST", "/read-all", {"json": {"through_id": 1}})):
             with self.subTest(path=path):
                 self.assertEqual(self.client.request(method, "/api/notifications" + path, **kwargs).status_code, 401)
+
+    def test_loan_deep_link_reads_current_owned_record_outside_list_page(self):
+        with Session(self.engine) as db:
+            book = Book(title='详情图书', author='作者')
+            db.add(book)
+            db.flush()
+            own = Loan(reader_id=1, book_id=book.id, status='rejected', reject_reason='已处理')
+            other = Loan(reader_id=2, book_id=book.id, status='cancelled')
+            db.add_all([own, other])
+            db.commit()
+            own_id, other_id = own.id, other.id
+        response = self.client.get(f'/api/loans/{own_id}', headers=self.headers).json()
+        self.assertEqual(response['data']['reject_reason'], '已处理')
+        for target in (other_id, 99999):
+            self.assertEqual(self.client.get(f'/api/loans/{target}', headers=self.headers).json()['code'], 404)
+        self.assertEqual(self.client.get(f'/api/loans/{own_id}').status_code, 401)
 
     def test_list_is_owned_paginated_and_newest_first(self):
         first = self.notice()

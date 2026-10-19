@@ -17,6 +17,7 @@ from app.models.labs import Lab
 from app.models.reservations import Reservation
 from app.models.users import User
 from app.schemas.reservation import ReservationCreateRequest, ReservationReviewRequest, reservation_time
+from app.services.notification_service import emit_notification
 
 
 def approved_conflict(
@@ -195,7 +196,7 @@ def list_reservations_page(
     return total, items
 
 
-def review_reservation(
+def _review_reservation_in_transaction(
     db: Session, current_admin: User, reservation_id: int, data: ReservationReviewRequest
 ) -> Reservation:
     """审核预约（通过 / 驳回）
@@ -240,7 +241,18 @@ def review_reservation(
     reservation.review_note = data.review_note.strip() if data.review_note else None
     reservation.reviewer_id = current_admin.id
     reservation.reviewed_at = datetime.now()
-    db.commit()
+    label = "通过" if data.status == "approved" else "驳回"
+    note = f"审核说明：{reservation.review_note}" if reservation.review_note else ""
+    emit_notification(db, user_id=reservation.applicant_id,
+        event_key=f"reservation:{reservation.id}:{data.status}", kind=f"reservation_{data.status}",
+        title=f"预约已{label}", resource_type="reservation", resource_id=reservation.id,
+        content=f"{lab.name}（{lab.code}）{reservation.date} {reservation.start}–{reservation.end} 的预约已{label}。{note}")
+    return reservation
+
+
+def review_reservation(db, current_admin, reservation_id, data):
+    with write_transaction(db):
+        reservation = _review_reservation_in_transaction(db, current_admin, reservation_id, data)
     db.refresh(reservation)
     return reservation
 
